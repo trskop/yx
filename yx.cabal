@@ -1,0 +1,73 @@
+name:                   yx
+version:                0.1.0.0
+synopsis:               TODO
+description:            TODO
+homepage:               https://github.com/trskop/yx
+bug-reports:            https://github.com/trskop/yx/issues
+license:                BSD3
+license-file:           LICENSE
+author:                 Peter Trško
+maintainer:             peter.trsko@gmail.com
+copyright:              (c) 2016 Peter Trško
+category:               Development
+build-type:             Simple
+cabal-version:          >=1.10
+
+extra-source-files:     ChangeLog.md, README.md
+
+flag pedantic
+  description:          Pass additional warning flags to GHC.
+  default:              False
+  manual:               True
+
+executable yx
+  hs-source-dirs:       src
+  main-is:              Main.hs
+  other-modules:
+    --Options.Applicative.Standard
+    --Options.Applicative.Standard.Arguments
+    YX.Main
+    YX.Type.DbConnection
+    YX.Type.RuntimeConfig
+    YX.Type.Scm
+
+  default-language:     Haskell2010
+  other-extensions:
+    FlexibleInstances
+    LambdaCase
+    NoImplicitPrelude
+    TypeSynonymInstances
+
+  build-depends:
+      base >=4.9 && <5
+
+    , aeson
+    , case-insensitive
+    , data-default
+    , data-default-class
+    , directory
+    , filepath
+    , freer
+    , optparse-applicative
+    , overloaded-records
+    , shake
+    , sqlite-simple
+    , text
+    , unix
+    , split
+
+  ghc-options:          -Wall
+  if flag(pedantic)
+    ghc-options:
+      -fwarn-tabs
+      -fwarn-implicit-prelude
+--    -Werror
+
+source-repository head
+  type:                 git
+  location:             git://github.com/trskop/yx.git
+
+--source-repository this
+--  type:                 git
+--  location:             TODO
+--  tag:                  TODO
