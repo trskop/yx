@@ -36,7 +36,7 @@ Usage
 -----
 
 ```
-yx cd [PATTERN]                 -- Jump in to an isolated environment.
+yx cd [PATTERN] [-e ENVIRONMENT]    -- Jump in to an isolated environment.
 
 yx ls [PATTERN]
 ```
@@ -53,13 +53,17 @@ yx new module [MODULE_NAME]     -- Create new module.
 Technologies
 ------------
 
+Notes on what things would be good to use:
+
 * optparse-applicative
 * shake
 * overloaded-records
 
 
-Configuration Files
--------------------
+User Configuration and Data Files
+---------------------------------
+
+**NOT YET IMPLEMENTED.**
 
 ```
 ${HOME}/.config/yx/global.yaml
@@ -82,7 +86,7 @@ ${YX_PROJECT_ROOT}/
      |       |-- bash/
      |       |   |-- bashrc
      |       |   `-- completion
-     |       |   
+     |       |
      |       `-- bin/
      |           |-- build --> ${YX_EXE}
      |           |-- ghci --> ${YX_EXE}
@@ -94,8 +98,42 @@ ${YX_PROJECT_ROOT}/
          `-- config.bin
 ```
 
-Bash is invoked as:
+When YX is invoked using `yx cd [PATTERN] [-e ENVIRONMENT]` then `PATH`
+environment variable is modified, and
+`"${YX_PROJECT_ROOT}/.yx-stuff/env/${YX_ENVIRONMENT}/bin"` is as the first
+entry. When no specific environment is specified then `"_default"` is used.
+
+Command `yx cd` invokes shell. Currently only Bash is supported, and it's
+invoked as:
 
 ```
 bash --rcfile "${YX_PROJECT_ROOT}/.yx-stuff/bash/bashrc"
+```
+
+Script `"${YX_PROJECT_ROOT}/.yx-stuff/bash/bashrc"` does:
+
+* Loads user `.bashrc` or other appropriate profile script. I.e. all the user
+  settings will be preserved.
+* Adds YX specific functions in to your interactive environment.
+
+
+YX Project Configuration File
+-----------------------------
+
+**NOT YET IMPLEMENTED.**
+
+```yaml
+# Recognized value of scm field is currently just "git".
+scm: Git
+
+# Recognized values of build-tool are "stack", and "cabal".
+build-tool: Stack
+
+# #############################################################################
+
+environment:
+  - ghc8:
+      env:
+        PATH: "/opt/ghc/8.0.1/bin:${PATH}"
+        STACK_YAML: "${XY_PROJECT_ROOT}/stack-nightly.yaml"```
 ```
