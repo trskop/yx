@@ -39,7 +39,11 @@ Usage
 yx cd [PATTERN]                 -- Jump in to an isolated environment.
 
 yx ls [PATTERN]
+```
 
+TODO:
+
+```
 yx init [TEMPLATE]              -- Create directory structure for a new project.
 
 yx new module [MODULE_NAME]     -- Create new module.
