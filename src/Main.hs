@@ -111,7 +111,7 @@ runProjectEnvironment project@Project{..} = do
         , "bash"    -- Try to locate it in "$PATH".
         ]
 
-    bashrc = projectYxStuffDir project "_default" EnvironmentStuff </> "bashrc"
+    bashrc = projectYxStuffDir project "_default" (ShellStuff Bash) </> "bashrc"
 
 newProeject :: DbConnection -> FilePath -> IO Project
 newProeject conn relativeDir = do
