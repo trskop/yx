@@ -9,12 +9,12 @@ module Main (main)
 import Prelude (error)
 
 import Control.Applicative ((<*>), liftA2, pure)
-import Control.Monad ((>>=), mapM_, when)
+import Control.Monad ((>>=), forM_, mapM_, when)
 import Data.Bool (Bool(True), (&&), not, otherwise)
 import Data.Function (($), (.), const, id)
 import Data.Functor ((<$>), fmap)
 import Data.Foldable (foldlM, foldr)
-import Data.List (elem, init, intercalate, last, lookup, map)
+import Data.List (elem, init, intercalate, last, lookup, map, unlines)
 import Data.Maybe (Maybe(Just, Nothing), catMaybes, fromMaybe, maybe)
 import Data.Monoid ((<>))
 import Data.String (IsString(fromString), String)
@@ -25,7 +25,7 @@ import System.Environment
     , getExecutablePath
     , getProgName
     )
-import System.IO (IO, FilePath)
+import System.IO (IO, FilePath, writeFile)
 
 import Data.List.Split (splitOn)
 import Data.Text (Text)
@@ -90,21 +90,28 @@ main = do
     printProject Project{..} = Text.putStrLn $ _name <> ": " <> _path
     printProjects = mapM_ printProject
 
-    runProjectEnvironment project@Project{..} = do
-        setCurrentDirectory (Text.unpack _path)
-        env <- modifyEnvVariables project <*> getEnvironment
-        shell <- findShell'
-            (lookup "PATH" env)
-            (lookup "SHELL" env)
-            defaultShells
-        executeFile shell True [] (Just env)
-      where
-        defaultShells =
-            [ "/bin/bash"
-            , "/usr/bin/bash"
-            , "/usr/local/bin/bash"
-            , "bash"    -- Try to locate it in "$PATH".
-            ]
+runProjectEnvironment :: Project -> IO ()
+runProjectEnvironment project@Project{..} = do
+    initYxStuff project ProjectConfig
+        { _scm = "Git"
+        , _environments = [Environment "_default"]
+        }
+    setCurrentDirectory (Text.unpack _path)
+    env <- modifyEnvVariables project <*> getEnvironment
+    shell <- findShell'
+        (lookup "PATH" env)
+        (lookup "SHELL" env)
+        defaultShells
+    executeFile shell True ["--rcfile", bashrc] (Just env)
+  where
+    defaultShells =
+        [ "/bin/bash"
+        , "/usr/bin/bash"
+        , "/usr/local/bin/bash"
+        , "bash"    -- Try to locate it in "$PATH".
+        ]
+
+    bashrc = projectYxStuffDir project "_default" EnvironmentStuff </> "bashrc"
 
 newProeject :: DbConnection -> FilePath -> IO Project
 newProeject conn relativeDir = do
@@ -167,9 +174,7 @@ data TypeOfStuff
     | ShellStuff KnownShell
     | CachedStuff
 
-type Environment = String
-
-projectYxStuffDir :: Project -> Environment -> TypeOfStuff -> FilePath
+projectYxStuffDir :: Project -> String -> TypeOfStuff -> FilePath
 projectYxStuffDir Project{_path = root} environment = (yxStuffRoot </>) . \case
     YxStuff -> yxStuffRoot
     EnvironmentStuff -> envDir
@@ -229,10 +234,46 @@ addYxEnvVariables project@Project{..} = do
         -> Maybe ([(String, String)] -> [(String, String)])
     add n = fmap $ (:) . (n,)
 
-{-
 mkBashrc :: Project -> Environment -> String
-mkBashrc
--}
+mkBashrc _ _ = unlines
+    [ "if [[ -e '/etc/bash.bashrc' ]]; then"
+    , "    source '/etc/bash.bashrc'"
+    , "fi"
+    , ""
+    , "if [[ -e \"${HOME}/.bashrc\" ]]; then"
+    , "    source \"${HOME}/.bashrc\""
+    , "fi"
+    , ""
+    , "if [[ -e \"${YX_ENVIRONMENT_DIR}/bash/completion\" ]]; then"
+    , "    source \"${YX_ENVIRONMENT_DIR}/bash/completion\""
+    , "fi"
+    , ""
+    , "function __yx_ps1()"
+    , "{"
+    , "    if [[ ! -v 'YX_VERSION' ]]; then"
+    , "        return"
+    , "    fi"
+    , ""
+    , "    if [[ -v 'YX_ENVIRONMENT' && \"${YX_ENVIRONMENT}\" != '_default' ]]"
+    , "    then"
+    , "        local yxEnv=\":${YX_ENVIRONMENT}\""
+    , "    fi"
+    , ""
+    , "    printf \"yx:%s%s\\n\" \"${YX_PROJECT}\" \"${yxEnv}\""
+    , "}"
+    , ""
+    , "function __yx_ps1_pretty()"
+    , "{"
+    , "    if [[ ! -v 'YX_VERSION' ]]; then"
+    , "        return"
+    , "    fi"
+    , ""
+    , "    printf \" (%s)\\n\" \"$(__yx_ps1)\""
+    , "}"
+    ]
+
+mkCompletion :: Project -> Environment -> String
+mkCompletion _ _ = ""
 
 getYxConfigDir :: IO FilePath
 getYxConfigDir = do
@@ -253,3 +294,23 @@ getYxDatabaseFile = do
                 \);"
     pure dbFile
 
+data Environment = Environment
+    { envName :: Text
+    }
+
+data ProjectConfig = ProjectConfig
+    { _scm :: Text
+    , _environments :: [Environment]
+    }
+
+initYxStuff :: Project -> ProjectConfig -> IO ()
+initYxStuff project ProjectConfig{..} = forM_ _environments $ \env -> do
+    let name = Text.unpack $ envName env
+        envDir = projectYxStuffDir project name  EnvironmentStuff
+        binDir = envDir </> "bin"
+        bashDir = envDir </> "bash"
+        bashrc = bashDir </> "bashrc"
+    mapM_ (createDirectoryIfMissing True) [binDir, bashDir]
+    bashrcIsMissing <- not <$> doesFileExist bashrc
+    when bashrcIsMissing
+        . writeFile bashrc $ mkBashrc project env
