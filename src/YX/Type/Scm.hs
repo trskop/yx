@@ -91,7 +91,7 @@ instance FromJSON Scm where
       where
         unspecifiedScm = withNull expectedType (pure UnspecifiedScm)
         specifiedScm = Aeson.withText expectedType (pure . fromText)
-        expectedTyp = "Scm"
+        expectedType = "Scm"
 
 instance ToJSON Scm where
     toJSON = toJSON . toText
