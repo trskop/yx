@@ -156,19 +156,23 @@ modifyEnvVariables = fmap (. getRidOfStackEnvVariables) . addYxEnvVariables
 data KnownShell = Bash
 
 data TypeOfStuff
-    = ExecutableStuff
+    = YxStuff
+    | EnvironmentStuff
+    | ExecutableStuff
     | ShellStuff KnownShell
     | CachedStuff
 
 type Environment = String
 
 projectYxStuffDir :: Project -> Environment -> TypeOfStuff -> FilePath
-projectYxStuffDif Project{_path = root} environment = (yxStuffRoot </>) . \case
+projectYxStuffDir Project{_path = root} environment = (yxStuffRoot </>) . \case
+    YxStuff -> yxStuffRoot
+    EnvironmentStuff -> envDir
     ExecutableStuff -> envDir </> "bin"
     ShellStuff Bash -> envDir </> "bash"
     CachedStuff -> "cache"
   where
-    yxStuffRoot = root </> ".yx-stuff"
+    yxStuffRoot = Text.unpack root </> ".yx-stuff"
     envDir = "env" </> environment
 
 updatePathEnvVariable :: Project -> String -> String -> String
@@ -194,19 +198,26 @@ getRidOfStackEnvVariables = (catMaybes .) . map $ \case
 addYxEnvVariables
     :: Project
     -> IO ([(String, String)] -> [(String, String)])
-addYxEnvVariables Project{..} = do
+addYxEnvVariables project@Project{..} = do
     yxExe <- getExecutablePath
     yxInvokedName <- getProgName
     pure . foldr (.) id $ catMaybes
-        [ add "YX_ENVIRONMENT"  projectEnvironment
-        , add "YX_PROJECT"      . Just $ Text.unpack _name
-        , add "YX_PROJECT_ROOT" . Just $ Text.unpack _path
-        , add "YX_INVOKED_AS"   $ Just yxInvokedName
-        , add "YX_EXE"          $ Just yxExe
-        , add "YX_VERSION"      . Just $ showVersion version
+        [ add "YX_ENVIRONMENT_DIR"  $ Just projectEnvironmentDir
+        , add "YX_ENVIRONMENT"      $ Just projectEnvironment
+        , add "YX_EXE"              $ Just yxExe
+        , add "YX_INVOKED_AS"       $ Just yxInvokedName
+        , add "YX_PROJECT"          . Just $ Text.unpack _name
+        , add "YX_PROJECT_ROOT"     $ Just projectRoot
+        , add "YX_STUFF"            $ Just yxStuffDir
+        , add "YX_VERSION"          . Just $ showVersion version
         ]
   where
-    projectEnvironment = Just "_default"
+    projectRoot = Text.unpack _path
+    projectEnvironment = "_default"
+    projectEnvironmentDir =
+        projectYxStuffDir project projectEnvironment EnvironmentStuff
+    yxStuffDir =
+        projectYxStuffDir project projectEnvironment YxStuff
 
     add :: String
         -> Maybe String
