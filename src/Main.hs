@@ -1,7 +1,8 @@
-{-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE NoImplicitPrelude #-}
+{-# LANGUAGE OverloadedLabels #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TupleSections #-}
 module Main (main)
   where
@@ -9,8 +10,8 @@ module Main (main)
 import Prelude (error)
 
 import Control.Applicative ((<*>), liftA2, pure)
-import Control.Monad ((>>=), forM_, mapM_, when)
-import Data.Bool (Bool(True), (&&), not, otherwise)
+import Control.Monad ((>>=), forM_, mapM_, unless)
+import Data.Bool (Bool(True), (&&), (||), not, otherwise)
 import Data.Function (($), (.), const, id)
 import Data.Functor ((<$>), fmap)
 import Data.Foldable (foldlM, foldr)
@@ -24,6 +25,7 @@ import System.Environment
     , getEnvironment
     , getExecutablePath
     , getProgName
+    , lookupEnv
     )
 import System.IO (IO, FilePath, writeFile)
 
@@ -51,6 +53,7 @@ import System.FilePath
     , splitSearchPath
     , takeFileName
     )
+import System.Posix.Files (createSymbolicLink)
 import System.Posix.Process (executeFile)
 
 import YX.Main
@@ -61,6 +64,18 @@ import Paths_yx (version)
 
 main :: IO ()
 main = do
+    getProgName >>= \case
+        "yx" -> yxMain
+        "build" -> yxExec "stack" ["build"]
+        "bld" -> yxExec "stack" ["build"]
+        _ -> yxMain
+  where
+    yxExec cmd args = lookupEnv "YX_VERSION" >>= \case
+        Nothing -> error "Not in an YX environment."
+        Just _ -> executeFile cmd True args Nothing
+
+yxMain :: IO ()
+yxMain = do
     dbFile <- getYxDatabaseFile
     getArgs >>= \case
         "cd" : pattern : _ -> SQLite.withConnection dbFile $ \c -> do
@@ -163,7 +178,12 @@ findShell path = go $ \case
 modifyEnvVariables
     :: Project
     -> IO ([(String, String)] -> [(String, String)])
-modifyEnvVariables = fmap (. getRidOfStackEnvVariables) . addYxEnvVariables
+modifyEnvVariables project = (. go) <$> addYxEnvVariables project
+  where
+    go = (getRidOfStackEnvVariables .) . map $ \case
+        (n@"PATH", path) -> (n, updatePathEnvVariable project "_default" path)
+            -- TODO: Correct implementation witouth hardcoded environment.
+        ev -> ev
 
 data KnownShell = Bash
 
@@ -284,8 +304,8 @@ getYxConfigDir = do
 getYxDatabaseFile :: IO FilePath
 getYxDatabaseFile = do
     dbFile <- (</> "data.db") <$> getYxConfigDir
-    dbFileIsMissing <- not <$> doesFileExist dbFile
-    when dbFileIsMissing $ SQLite.withConnection dbFile $ \conn ->
+    haveDbFile <- doesFileExist dbFile
+    unless haveDbFile $ SQLite.withConnection dbFile $ \conn ->
         SQLite.execute_ conn
             "CREATE TABLE Project\
                 \(id INTEGER PRIMARY KEY AUTOINCREMENT,\
@@ -309,8 +329,39 @@ initYxStuff project ProjectConfig{..} = forM_ _environments $ \env -> do
         envDir = projectYxStuffDir project name  EnvironmentStuff
         binDir = envDir </> "bin"
         bashDir = envDir </> "bash"
-        bashrc = bashDir </> "bashrc"
     mapM_ (createDirectoryIfMissing True) [binDir, bashDir]
-    bashrcIsMissing <- not <$> doesFileExist bashrc
-    when bashrcIsMissing
+
+    let bashrc = bashDir </> "bashrc"
+    haveBashrc <- doesFileExist bashrc
+    unless haveBashrc
         . writeFile bashrc $ mkBashrc project env
+
+    let buildCmd = binDir </> "build"
+    haveBuildCmd <- doesFileExist buildCmd
+    unless haveBuildCmd $ do
+        yxExe <- getExecutablePath
+        createSymbolicLink yxExe buildCmd
+
+    let bldCmd = binDir </> "bld"
+    haveBuildCmd <- doesFileExist bldCmd
+    unless haveBuildCmd $ do
+        yxExe <- getExecutablePath
+        createSymbolicLink yxExe bldCmd
+
+{- TODO:
+    let root = projectRoot project
+        yxConfig = root </> "xy.yaml"
+        yxConfig' = root </> "xy.yml"
+    haveYxConfig <- doesDirectoryExist yxConfig
+        <||> doesDirectoryExist yxConfig'
+    unless haveYxConfig $ mkYxConfig >>= writeFile yxConfig
+
+    (<||>) :: IO Bool -> IO Bool -> IO Bool
+    (<||>) = liftA2 (||)
+
+projectRoot :: Project -> FilePath
+projectRoot = Text.unpack . #path
+
+mkYxConfig :: Project -> ProjectConfig -> IO String
+mkYxConfig =
+-}
