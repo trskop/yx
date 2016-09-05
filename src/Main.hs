@@ -9,8 +9,8 @@ module Main (main)
 import Prelude (error)
 
 import Control.Applicative ((<*>), liftA2, pure)
-import Control.Monad ((>>=), mapM_)
-import Data.Bool (Bool(True), (&&), otherwise)
+import Control.Monad ((>>=), mapM_, when)
+import Data.Bool (Bool(True), (&&), not, otherwise)
 import Data.Function (($), (.), const, id)
 import Data.Functor ((<$>), fmap)
 import Data.Foldable (foldlM, foldr)
@@ -28,16 +28,21 @@ import System.Environment
 import System.IO (IO, FilePath)
 
 import Data.List.Split (splitOn)
+import Data.Text (Text)
 import qualified Data.Text as Text (unpack)
 import qualified Data.Text.IO as Text (putStrLn)
-import Database.SQLite.Simple (withConnection)
+import qualified Database.SQLite.Simple as SQLite (execute_, withConnection)
 import System.Directory
-    ( canonicalizePath
+    ( XdgDirectory(XdgConfig)
+    , canonicalizePath
+    , createDirectory
+    , createDirectoryIfMissing
     , doesDirectoryExist
     , doesFileExist
     , executable
     , findFileWith
     , getPermissions
+    , getXdgDirectory
     , setCurrentDirectory
     )
 import System.FilePath
@@ -56,8 +61,9 @@ import Paths_yx (version)
 
 main :: IO ()
 main = do
+    dbFile <- getYxDatabaseFile
     getArgs >>= \case
-        "cd" : pattern : _ -> withConnection "test.db" $ \c -> do
+        "cd" : pattern : _ -> SQLite.withConnection dbFile $ \c -> do
             let conn = DbConnection c
             findProjects conn (modifyPattern pattern) >>= \case
                 [] -> do
@@ -68,15 +74,14 @@ main = do
                 [p] -> runProjectEnvironment p
                 ps -> printProjects ps
 
-        ["ls"] -> withConnection "test.db" $ \c ->
+        ["ls"] -> SQLite.withConnection dbFile $ \c ->
             listProjects (DbConnection c) >>= printProjects
 
-        "ls" : pattern : _ -> withConnection "test.db" $ \c ->
+        "ls" : pattern : _ -> SQLite.withConnection dbFile $ \c ->
             findProjects (DbConnection c) (modifyPattern pattern)
                 >>= printProjects
 
         _ -> error "Unknown argument or option."
-
   where
     modifyPattern pat
       | '*' `elem` pat = fromString pat
@@ -228,3 +233,23 @@ addYxEnvVariables project@Project{..} = do
 mkBashrc :: Project -> Environment -> String
 mkBashrc
 -}
+
+getYxConfigDir :: IO FilePath
+getYxConfigDir = do
+    dir <- getXdgDirectory XdgConfig "yx"
+    createDirectoryIfMissing True dir
+    pure dir
+
+getYxDatabaseFile :: IO FilePath
+getYxDatabaseFile = do
+    dbFile <- (</> "data.db") <$> getYxConfigDir
+    dbFileIsMissing <- not <$> doesFileExist dbFile
+    when dbFileIsMissing $ SQLite.withConnection dbFile $ \conn ->
+        SQLite.execute_ conn
+            "CREATE TABLE Project\
+                \(id INTEGER PRIMARY KEY AUTOINCREMENT,\
+                \ name TEXT UNIQUE NOT NULL,\
+                \ path TEXT UNIQUE NOT NULL\
+                \);"
+    pure dbFile
+

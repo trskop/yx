@@ -31,6 +31,8 @@ What YX Is Not
   handles all the build system options. If you know Travis CI then `yx.yaml`
   will remind you of its configuration file.
 
+* **YX is not a package system.** .
+
 
 Usage
 -----
@@ -67,10 +69,7 @@ User Configuration and Data Files
 
 ```
 ${HOME}/.config/yx/global.yaml
-```
-
-```
-${HOME}/.cache/yx/data.db
+${HOME}/.config/yx/data.db
 ```
 
 
