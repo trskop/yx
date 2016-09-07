@@ -27,9 +27,13 @@ executable yx
     --Options.Applicative.Standard
     --Options.Applicative.Standard.Arguments
     YX.Main
+    YX.Initialize
+    YX.Type.BuildTool
+    YX.Type.ConfigFile
     YX.Type.DbConnection
     YX.Type.RuntimeConfig
     YX.Type.Scm
+    YX.Type.Shell
 
   default-language:     Haskell2010
   other-extensions:
@@ -42,19 +46,26 @@ executable yx
       base >=4.9 && <5
 
     , aeson
+    , bytestring
     , case-insensitive
     , data-default
     , data-default-class
     , directory
     , filepath
     , freer
+    , Glob
     , optparse-applicative
     , overloaded-records
     , shake
+    , split
     , sqlite-simple
     , text
     , unix
-    , split
+    , unordered-containers
+    , yaml
+
+    -- Not on Hackage:
+    , maybe-either
 
   ghc-options:          -Wall
   if flag(pedantic)

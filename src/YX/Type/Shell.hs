@@ -1,16 +1,9 @@
-{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE TypeOperators #-}
 -- |
 -- Module:       $HEADER$
--- Description:  Data type that represents name of a SCM (Source Code
---               Management) tool.
+-- Description:  Enumeration of shells that YX supports natively.
 -- Copyright:    (c) 2016 Peter Trško
 -- License:      BSD3
 --
@@ -18,10 +11,10 @@
 -- Stability:    experimental
 -- Portability:  GHC specific language extensions.
 --
--- Data type that represents name of a SCM (Source Code Management) tool.
-module YX.Type.Scm
-    ( Scm(..)
-    , SomeScm
+-- Enumeration of shells that YX supports natively.
+module YX.Type.Shell
+    ( Shell(..)
+    , SomeShell
     , toString
     , fromString
     , toText
@@ -48,37 +41,38 @@ import Data.Specifiable (Specifiable)
 import Data.Text (Text)
 
 
--- | Enumeration of SCMs (Source Code Managemetn tools) that YX supports
--- natively.
-data Scm = Git
+-- | Enumeration of shells that YX supports natively.
+data Shell = Bash
   deriving (Bounded, Enum, Eq, Generic, Ord, Read, Show)
 
--- | Convert 'Scm' in to a generic string.
-toString :: IsString s => Scm -> s
+-- | Convert 'Shell' in to a generic string.
+toString :: IsString s => Shell -> s
 toString = \case
-    Git -> "Git"
+    Bash -> "Bash"
 {-# INLINEABLE toString #-}
 
--- | Convert a generic string in to a 'Scm' in a case insensitive maner.
+-- | Convert a generic string in to a 'Shell' in a case insensitive maner.
 -- 'Nothing' is returned when string value is not recognized.
-fromString :: (Eq s, IsString s, CI.FoldCase s) => s -> Maybe Scm
+fromString :: (Eq s, IsString s, CI.FoldCase s) => s -> Maybe Shell
 fromString s = case CI.mk s of
-    "git" -> Just Git
+    "bash" -> Just Bash
     _ -> Nothing
 {-# INLINEABLE fromString #-}
 
-toText :: Scm -> Text
+-- | Specialization of 'toString' for 'Text'.
+toText :: Shell -> Text
 toText = toString
 {-# INLINE toText #-}
 
-fromText :: Text -> Maybe Scm
+-- | Specialization of 'fromString' for 'Text'.
+fromText :: Text -> Maybe Shell
 fromText = fromString
 {-# INLINE fromText #-}
 
-instance FromJSON Scm where
-    parseJSON = Aeson.withText "Scm" $ maybe empty pure . fromText
+instance FromJSON Shell where
+    parseJSON = Aeson.withText "Shell" $ maybe empty pure . fromText
 
-instance ToJSON Scm where
+instance ToJSON Shell where
     toJSON = toJSON . toText
 
-type SomeScm = Specifiable Text Scm
+type SomeShell = Specifiable Text Shell

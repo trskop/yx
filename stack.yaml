@@ -37,7 +37,10 @@ resolver: nightly-2016-08-27
 # will not be run. This is useful for tweaking upstream packages.
 packages:
   - '.'
-# - '../specifiable'
+  - location:
+      git: https://github.com/trskop/maybe-either
+      commit: 882ba931dfb36efaa40b41b783ce9e63feb922ed
+    extra-dep: true
 
 # Dependency packages to be pulled from upstream that are not in the resolver
 # (e.g., acme-missiles-0.3)

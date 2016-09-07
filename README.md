@@ -41,12 +41,12 @@ When `yx cd PATTERN` is executed, then it will lookup `PATTERN` in its internal
 database. If it succeeded in find one project then it will do the following:
 
 1. Generate a shell `*rc` script(s) that will be used when invoking a shell
-   with an isolated environment.
+   within an isolated environment.
 
 2. Create a bunch of symlinks to its self. These behave as an advanced shell
    `alias`.
 
-3. It will cleanup environment variables, and it will followint variables:
+3. It will cleanup environment variables, and it will following variables:
 
     - `YX_ENVIRONMENT` --- Contains the name of project environment.
 
@@ -142,8 +142,11 @@ User Configuration and Data Files
 **NOT YET IMPLEMENTED.**
 
 ```
-${HOME}/.config/yx/global.yaml
-${HOME}/.config/yx/data.db
+${HOME}/
+|-- .bash_yx
+`-- .config/yx/
+    |-- global.yaml
+    `-- data.db
 ```
 
 
@@ -161,7 +164,9 @@ ${YX_PROJECT_ROOT}/
      |       |   `-- completion
      |       |
      |       `-- bin/
+     |           |-- yx --> ${YX_EXE}
      |           |-- build --> ${YX_EXE}
+     |           |-- ghc --> ${YX_EXE}
      |           |-- ghci --> ${YX_EXE}
      |           |-- repl --> ${YX_EXE}
      |           |-- run --> ${YX_EXE}
@@ -196,17 +201,30 @@ YX Project Configuration File
 **NOT YET IMPLEMENTED.**
 
 ```yaml
-# Recognized value of scm field is currently just "git".
-scm: Git
+# Source Code Management (SCM) tool used by the project.
+# Currently only 'Git' is recognized automatically.
+scm: "Git"
 
-# Recognized values of build-tool are "stack", and "cabal".
+# Build tool used by the project.
+# Currently only 'Cabal' and 'Stack' are recognized automatically.
 build-tool: Stack
 
-# #############################################################################
-
+# Environments for this project.
 environment:
-  - ghc8:
-      env:
-        PATH: "/opt/ghc/8.0.1/bin:${PATH}"
-        STACK_YAML: "${XY_PROJECT_ROOT}/stack-nightly.yaml"```
+  # Execution environment named "default". It is used when there is no
+  # environment specified on the command line, due to "is-default: true".
+  default:
+    is-default: true
+
+    # Add or modify environment variables of the isolated execution
+    # environment.
+    #env:
+    #  PATH: "/some/path/bin:${PATH}"
+
+    # Add following commands/executables in to the isolated execution
+    # environment.
+    #bin:
+    #  build: {command: stack build}
+    #  lint: {symlink: /opt/hlint/bin/hlint}
+    #  hoogle: {alias: "stack exec hoogle --"}
 ```
