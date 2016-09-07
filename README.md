@@ -38,14 +38,15 @@ How Does YX Work
 ----------------
 
 When `yx cd PATTERN` is executed, then it will lookup `PATTERN` in its internal
-database. If it succeeded in find one project then it will generate:
+database. If it succeeded in find one project then it will do the following:
 
-1. Shell `*rc` script(s) that will be used when invoking a shell with an
-   isolated environment.
+1. Generate a shell `*rc` script(s) that will be used when invoking a shell
+   with an isolated environment.
 
-2. Bunch of symlinks to its self. These behave as an advanced shell `alias`.
+2. Create a bunch of symlinks to its self. These behave as an advanced shell
+   `alias`.
 
-3. Will cleanup environment variables, and it will followint variables:
+3. It will cleanup environment variables, and it will followint variables:
 
     - `YX_ENVIRONMENT` --- Contains the name of project environment.
 
@@ -66,8 +67,9 @@ database. If it succeeded in find one project then it will generate:
 
     - `YX_VERSION` --- Version of YX that is being used.
 
-4. When all the above is done, YX will invoke shell executable with the modified
-   environment, and it will pass generated `*rc` file to it as a provile script.
+4. When all the above is done, YX will invoke a shell executable with the
+   modified environment, and it will pass generated `*rc` file to it as a
+   provile script.
 
 If `PATTERN` is not found in the YX database and it is an existing directory,
 YX will assume that user is adding new project in to its known list of
