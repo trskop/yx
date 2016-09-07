@@ -56,8 +56,11 @@ import System.FilePath
 import System.Posix.Files (createSymbolicLink)
 import System.Posix.Process (executeFile)
 
+import YX.Initialize () -- Force build.
 import YX.Main
+import YX.Type.ConfigFile ()    -- Force build.
 import YX.Type.DbConnection (DbConnection(DbConnection))
+import YX.Type.Shell () -- Force build.
 
 import Paths_yx (version)
 
@@ -260,14 +263,6 @@ mkBashrc _ _ = unlines
     , "    source '/etc/bash.bashrc'"
     , "fi"
     , ""
-    , "if [[ -e \"${HOME}/.bashrc\" ]]; then"
-    , "    source \"${HOME}/.bashrc\""
-    , "fi"
-    , ""
-    , "if [[ -e \"${YX_ENVIRONMENT_DIR}/bash/completion\" ]]; then"
-    , "    source \"${YX_ENVIRONMENT_DIR}/bash/completion\""
-    , "fi"
-    , ""
     , "function __yx_ps1()"
     , "{"
     , "    if [[ ! -v 'YX_VERSION' ]]; then"
@@ -290,6 +285,14 @@ mkBashrc _ _ = unlines
     , ""
     , "    printf \" (%s)\\n\" \"$(__yx_ps1)\""
     , "}"
+    , ""
+    , "if [[ -e \"${HOME}/.bash_yx\" ]]; then"
+    , "    source \"${HOME}/.bash_yx\""
+    , "fi"
+    , ""
+    , "if [[ -e \"${YX_ENVIRONMENT_DIR}/bash/completion\" ]]; then"
+    , "    source \"${YX_ENVIRONMENT_DIR}/bash/completion\""
+    , "fi"
     ]
 
 mkCompletion :: Project -> Environment -> String
