@@ -31,7 +31,73 @@ What YX Is Not
   handles all the build system options. If you know Travis CI then `yx.yaml`
   will remind you of its configuration file.
 
-* **YX is not a package system.** .
+* **YX is not a package system.**
+
+
+How Does YX Work
+----------------
+
+When `yx cd PATTERN` is executed, then it will lookup `PATTERN` in its internal
+database. If it succeeded in find one project then it will generate:
+
+1. Shell `*rc` script(s) that will be used when invoking a shell with an
+   isolated environment.
+
+2. Bunch of symlinks to its self. These behave as an advanced shell `alias`.
+
+3. Will cleanup environment variables, and it will followint variables:
+
+    - `YX_ENVIRONMENT` --- Contains the name of project environment.
+
+    - `YX_ENVIRONMENT_DIR` --- Path to `${YX_STUFF}/${YX_ENVIRONMENT}`.
+
+    - `YX_EXE` --- Absolute file path of YX executable that is being used.
+
+    - `YX_INVOKED_AS` --- Alias (symbolic link file name) used for executing
+      YX executable.
+
+    - `YX_PROJECT` --- Name of the project for which the isolated environment
+      is being created.
+
+    - `YX_PROJECT_ROOT` --- Absolute path to project directory.
+
+    - `YX_STUFF` --- Path to a directory where YX stuff for current project is
+      stored.
+
+    - `YX_VERSION` --- Version of YX that is being used.
+
+4. When all the above is done, YX will invoke shell executable with the modified
+   environment, and it will pass generated `*rc` file to it as a provile script.
+
+If `PATTERN` is not found in the YX database and it is an existing directory,
+YX will assume that user is adding new project in to its known list of
+projects. This will trigger YX project initialization.
+
+**TODO:**
+
+* Plan is to make shell selection fully customizable which will include
+  template files for `*rc` scripts.
+
+* Support for shell completion of YX commands.
+
+* Modification of environment variables will be configurable from `yx.yaml`
+  file.
+
+* Fully customizable command aliasing. Meaning, all the symbolic links created
+  to YX, in the `${YX_ENVIRONMENT_DIR}/bin` directory, will be defined in
+  `yx.yaml`. This feature should include customization of shell completion.
+
+* Provide customized environment for editor/IDE. For example customized lint,
+  coding style formatting, preformatted Git commit messages, etc.
+
+  This is just an idea that should work, but no investigation in this area was
+  done, so far.
+
+* Simplified release process and project version management. Another idea that
+  migt be useful to explore.
+
+* Support for running isolated environment inside a container (Docker or rkt).
+  This shouldn't be so hard.
 
 
 Usage
@@ -43,12 +109,18 @@ yx cd [PATTERN] [-e ENVIRONMENT]    -- Jump in to an isolated environment.
 yx ls [PATTERN]
 ```
 
-TODO:
+**TODO:**
+
+Create new project from a template:
 
 ```
-yx init [TEMPLATE]              -- Create directory structure for a new project.
+yx init [TEMPLATE]
+```
 
-yx new module [MODULE_NAME]     -- Create new module.
+Create a new module/file/code-snippet:
+
+```
+yx new {module|file|snippet} [PATH]
 ```
 
 
