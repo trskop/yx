@@ -15,9 +15,8 @@ import Data.Bool (Bool(False, True), (||), not, otherwise)
 import Data.Either (Either(Left, Right))
 import Data.Function (($), (.), flip)
 import Data.Functor ((<$), (<$>))
-import Data.IORef (atomicWriteIORef, newIORef, readIORef)
+import Data.IORef (IORef, atomicWriteIORef, newIORef, readIORef)
 import qualified Data.List as List (map, null)
-import Data.List.NonEmpty (NonEmpty((:|)))
 import qualified Data.List.NonEmpty as NonEmpty (head, toList)
 import Data.Maybe (Maybe(Just, Nothing), fromMaybe)
 import Data.Monoid ((<>))
@@ -58,7 +57,7 @@ import System.Directory
     , doesFileExist
     , removeFile
     )
-import System.FilePath ((</>), (<.>))
+import System.FilePath ((</>))
 import qualified System.FilePath as FilePath
     ( dropTrailingPathSeparator
     , makeRelative
@@ -69,6 +68,17 @@ import System.FilePath.Glob (globDir1)
 import qualified System.FilePath.Glob as Glob (compile)
 import qualified System.Posix.Files as Posix (createSymbolicLink)
 
+import YX.Paths
+    ( ProjectRoot
+    , TypeOfStuff(CachedStuff, EnvironmentStuff)
+    , yxConfigs
+    , yxExeStuff
+    , yxShellStuff
+    , yxStuffFile
+    , yxStuffPath
+    )
+import YX.Type.BuildTool (BuildTool(Cabal, Stack))
+import qualified YX.Type.BuildTool as BuildTool (toText)
 import YX.Type.CommandType (CommandType(Alias, Command, Symlink))
 import YX.Type.ConfigFile
     ( ProjectConfig(ProjectConfig, _environments)
@@ -78,26 +88,32 @@ import YX.Type.ConfigFile
     )
 import YX.Type.Scm (Scm(Git))
 import qualified YX.Type.Scm as Scm (toText)
-import YX.Type.BuildTool (BuildTool(Cabal, Stack))
-import qualified YX.Type.BuildTool as BuildTool (toText)
+import YX.Type.Shell (Shell(Bash))
 
 
-type ProjectRoot = FilePath
 type GlobPattern = String
 
 -- | During initialization we only know where the project is, nothing more.
-initializeNewProject :: ProjectRoot -> IO ()
-initializeNewProject root = do
+initializeProject :: ProjectRoot -> IO ProjectConfig
+initializeProject root = do
     possibleConfig <- detectYxConfig root
-    doYxStuff root (root </> yxConfig) $ (root </>) <$> possibleConfig
+    cfgRef <- newIORef (Nothing :: Maybe ProjectConfig)
+    doYxStuff cfgRef root (root </> yxConfig) $ (root </>) <$> possibleConfig
+    readIORef cfgRef >>= \case
+        Nothing -> readCachedYxConfig $ yxStuffFile root CachedStuff "config.bin"
+        Just cfg -> pure cfg
   where
     yxConfig = NonEmpty.head yxConfigs
         -- First file is considered to be the default. See 'yxConfigs' for more
         -- details.
 
-doYxStuff :: ProjectRoot -> FilePath -> Maybe FilePath -> IO ()
-doYxStuff root defaultYxConfig possibleYxConfig = shake opts $ do
-    cfgRef <- liftIO $ newIORef (Nothing :: Maybe ProjectConfig)
+doYxStuff
+    :: IORef (Maybe ProjectConfig)
+    -> ProjectRoot
+    -> FilePath
+    -> Maybe FilePath
+    -> IO ()
+doYxStuff cfgRef root defaultYxConfig possibleYxConfig = shake opts $ do
     getProjectCfg' <- Shake.newCache $ \(yxConfigChanged, cacheFile) -> liftIO
         $ let memo r = r <$ atomicWriteIORef cfgRef (Just r)
               getMemo = readIORef cfgRef
@@ -142,22 +158,22 @@ doYxStuff root defaultYxConfig possibleYxConfig = shake opts $ do
         -- would keep e.g. old links in "bin" dir.
         () <$ compileProjectCfg out
 
-    yxStuff </> "*" </> "bash" </> "bashrc" %> \out -> do
+    yxShellStuff root "*" Bash </> "bashrc" %> \out -> do
         Shake.need [yxConfig, cfgCacheFile]
         cfg <- getProjectCfg cfgCacheFile
-        compileBashrc cfg (FilePath.makeRelative yxStuff out) out
+        compileBashrc cfg (FilePath.makeRelative yxEnvStuff out) out
 
     -- Combinator 'Shake.alternatives' allows us to use overlapping patterns.
     Shake.alternatives $ do
         -- Symbolic link to "yx" is a special case. We want to handle it
         -- separately to make that fact explicit.
-        yxStuff </> "*" </> "bin" </> "yx" %> \out -> do
+        yxExeStuff root "*" </> "yx" %> \out -> do
             yxExe <- liftIO getExecutablePath
             createExecutableLink yxExe out
 
-        yxStuff </> "*" </> "bin" </> "*" %> \out -> do
+        yxExeStuff root "*" </> "*" %> \out -> do
             Shake.need [cfgCacheFile]
-            (envName, exeName) <- parseBinFileName yxStuff out
+            (envName, exeName) <- parseBinFileName yxEnvStuff out
             cfg <- getProjectCfg cfgCacheFile
             lookupExe cfg envName exeName >>= \exe -> case _type exe of
                 Alias -> error $ out
@@ -174,16 +190,16 @@ doYxStuff root defaultYxConfig possibleYxConfig = shake opts $ do
         -- read the cached version if its available.
         Shake.need [cfgCacheFile]
 
+        -- We need to traverse the configuration file to know what tasks need
+        -- to be done executed.
         getProjectCfg cfgCacheFile >>= mapHM_ envDependencies . _environments
   where
     yxConfig = fromMaybe defaultYxConfig possibleYxConfig
-
-    cfgCacheFile = yxCache </> "config.bin"
-    yxCache = yxStuff </> "cache"
-    yxStuff = root </> ".yx-stuff"
+    cfgCacheFile = yxStuffFile root CachedStuff "config.bin"
+    yxEnvStuff = yxStuffPath (Just root) (EnvironmentStuff Nothing)
 
     opts = shakeOptions
-        { shakeFiles = yxCache
+        { shakeFiles = yxStuffPath (Just root) CachedStuff
 --      , shakeLint = Just Shake.LintFSATrace
         }
 
@@ -200,7 +216,7 @@ doYxStuff root defaultYxConfig possibleYxConfig = shake opts $ do
             Symlink -> needBin name exeName
 
     needBin name bin = do
-        Shake.need [yxStuff </> Text.unpack name </> "bin" </> Text.unpack bin]
+        Shake.need [yxExeStuff root (Text.unpack name) </> Text.unpack bin]
 
     parseBinFileName dir file
       | haveParseError = error $ file <> ": Unexpected path when parsing\
@@ -354,18 +370,6 @@ createProjectConfig root = do
     field' name = \case
         Nothing -> "#" <> name <> ":"
         Just value -> field name value
-
--- | Non-empty list of possible YX project configuration files:
---
--- * @yx.yaml@ (considered as a default when automatically creating new file)
---
--- * @yx.yml@
-yxConfigs :: NonEmpty FilePath
-yxConfigs = yxYaml :| [yxYml]
-  where
-    yxBase = "yx"
-    yxYaml = yxBase <.> "yaml"
-    yxYml = yxBase <.> "yml"
 
 -- | Detect if project contains YX project configuration file, and which, if
 -- its found.

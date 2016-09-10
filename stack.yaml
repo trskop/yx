@@ -41,6 +41,10 @@ packages:
       git: https://github.com/trskop/maybe-either
       commit: 882ba931dfb36efaa40b41b783ce9e63feb922ed
     extra-dep: true
+  - location:
+      git: https://github.com/trskop/lifted
+      commit: f4e5e279dfe282096ae8b075805d907206ee9381
+    extra-dep: true
 
 # Dependency packages to be pulled from upstream that are not in the resolver
 # (e.g., acme-missiles-0.3)

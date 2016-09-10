@@ -9,14 +9,15 @@ module Main (main)
 
 import Prelude (error)
 
-import Control.Applicative ((<*>), liftA2, pure)
-import Control.Monad ((>>=), forM_, mapM_, unless)
-import Data.Bool (Bool(True), (&&), (||), not, otherwise)
-import Data.Function (($), (.), const, id)
+import Control.Applicative ((<*>), pure)
+import Control.Monad ((>>=), mapM_, unless)
+import Data.Bool (Bool(True), otherwise)
+import Data.Eq (Eq((/=)))
+import Data.Function (($), (.), id)
 import Data.Functor ((<$>), fmap)
-import Data.Foldable (foldlM, foldr)
-import Data.List (elem, init, intercalate, last, lookup, map, unlines)
-import Data.Maybe (Maybe(Just, Nothing), catMaybes, fromMaybe, maybe)
+import Data.Foldable (foldr)
+import Data.List (elem, lookup, map, words)
+import Data.Maybe (Maybe(Just, Nothing), catMaybes)
 import Data.Monoid ((<>))
 import Data.String (IsString(fromString), String)
 import Data.Version (showVersion)
@@ -27,38 +28,53 @@ import System.Environment
     , getProgName
     , lookupEnv
     )
-import System.IO (IO, FilePath, writeFile)
+import System.IO (FilePath, IO)
 
-import Data.List.Split (splitOn)
-import Data.Text (Text)
+import qualified Data.HashMap.Strict as HashMap (lookup)
+--import Data.List.Split (splitOn)
+--import Data.Text (Text)
 import qualified Data.Text as Text (unpack)
 import qualified Data.Text.IO as Text (putStrLn)
 import qualified Database.SQLite.Simple as SQLite (execute_, withConnection)
 import System.Directory
     ( XdgDirectory(XdgConfig)
     , canonicalizePath
-    , createDirectory
+--  , createDirectory
     , createDirectoryIfMissing
     , doesDirectoryExist
     , doesFileExist
-    , executable
-    , findFileWith
-    , getPermissions
+--  , executable
+--  , findFileWith
+--  , getPermissions
     , getXdgDirectory
     , setCurrentDirectory
     )
 import System.FilePath
     ( (</>)
     , dropTrailingPathSeparator
-    , splitSearchPath
     , takeFileName
     )
-import System.Posix.Files (createSymbolicLink)
 import System.Posix.Process (executeFile)
 
-import YX.Initialize () -- Force build.
+import YX.Initialize (initializeProject, readCachedYxConfig)
 import YX.Main
-import YX.Type.ConfigFile ()    -- Force build.
+import YX.Paths
+    ( EnvironmentName
+    , TypeOfStuff(CachedStuff, EnvironmentStuff, YxStuff)
+    , yxExeStuff
+    , yxShellStuff
+    , yxStuffPath
+    , yxStuffFile
+    )
+import YX.Shell (Shell(Bash), findShell, shellExePaths)
+import YX.Type.CommandType (CommandType(Command))
+import YX.Type.ConfigFile (Executable(Executable){-, ProjectConfig-})
+import qualified YX.Type.ConfigFile as Environment (Environment(_bin))
+import qualified YX.Type.ConfigFile as ProjectConfig
+    ( Executable(_command, {-_environment,-} _type)
+    , defaultEnvironment
+    , getEnvironment
+    )
 import YX.Type.DbConnection (DbConnection(DbConnection))
 import YX.Type.Shell () -- Force build.
 
@@ -69,13 +85,37 @@ main :: IO ()
 main = do
     getProgName >>= \case
         "yx" -> yxMain
-        "build" -> yxExec "stack" ["build"]
-        "bld" -> yxExec "stack" ["build"]
-        _ -> yxMain
+        other -> yxExec other
   where
-    yxExec cmd args = lookupEnv "YX_VERSION" >>= \case
-        Nothing -> error "Not in an YX environment."
-        Just _ -> executeFile cmd True args Nothing
+    yxExec alias = do
+        lookupEnv "YX_VERSION" >>= \case
+            Nothing -> error "Not in an YX environment."
+            Just _ -> pure ()
+
+        envName <- lookupEnv "YX_ENVIRONMENT" >>= \case
+            Nothing -> error "YX environment variables are corrupted."
+            Just x -> pure x
+
+        root <- lookupEnv "YX_PROJECT_ROOT" >>= \case
+            Nothing -> error "YX environment variables are corrupted."
+            Just x -> pure x
+
+        projCfg <- readCachedYxConfig
+            $ yxStuffFile root CachedStuff "config.bin"
+
+        projEnv <- case ProjectConfig.getEnvironment projCfg $ fromString envName of
+            Nothing -> error "YX configuration corrupted."
+            Just e -> pure e
+
+        case HashMap.lookup (fromString alias) (Environment._bin projEnv) of
+            Nothing -> errInvalidAlias alias
+            Just Executable{..}
+              | _type /= Command -> errInvalidAlias alias
+              | otherwise        -> case words (Text.unpack _command) of
+                [] -> error $ alias <> ": Invalid configuration of this alias."
+                cmd : args -> executeFile cmd True args Nothing
+
+    errInvalidAlias cmd = error $ cmd <> ": YX called with invalid alias."
 
 yxMain :: IO ()
 yxMain = do
@@ -87,9 +127,10 @@ yxMain = do
                 [] -> do
                     isADirectory <- doesDirectoryExist pattern
                     if isADirectory
-                        then newProeject conn pattern >>= runProjectEnvironment
+                        then newProeject conn pattern
+                            >>= (`runProjectEnvironment` Nothing)
                         else error "No such project found, try \"yx ls PATTERN\"."
-                [p] -> runProjectEnvironment p
+                [p] -> runProjectEnvironment p Nothing
                 ps -> printProjects ps
 
         ["ls"] -> SQLite.withConnection dbFile $ \c ->
@@ -108,28 +149,36 @@ yxMain = do
     printProject Project{..} = Text.putStrLn $ _name <> ": " <> _path
     printProjects = mapM_ printProject
 
-runProjectEnvironment :: Project -> IO ()
-runProjectEnvironment project@Project{..} = do
-    initYxStuff project ProjectConfig
-        { _scm = "Git"
-        , _environments = [Environment "_default"]
-        }
-    setCurrentDirectory (Text.unpack _path)
-    env <- modifyEnvVariables project <*> getEnvironment
-    shell <- findShell'
+runProjectEnvironment :: Project -> Maybe EnvironmentName -> IO ()
+runProjectEnvironment project@Project{..} possiblyEnvName = do
+    projectCfg <- initializeProject root
+    (projEnvName, _projEnv) <- getProjEnv projectCfg
+    setCurrentDirectory root
+    env <- modifyEnvVariables project projEnvName <*> getEnvironment
+    shell <- findShell
         (lookup "PATH" env)
         (lookup "SHELL" env)
         defaultShells
-    executeFile shell True ["--rcfile", bashrc] (Just env)
+    executeFile shell True ["--rcfile", bashrc projEnvName] (Just env)
   where
-    defaultShells =
-        [ "/bin/bash"
-        , "/usr/bin/bash"
-        , "/usr/local/bin/bash"
-        , "bash"    -- Try to locate it in "$PATH".
-        ]
+    -- We currently support only bash, so it makes sense to have it as default.
+    defaultShells = shellExePaths Bash
+    bashrc projEnvName = yxShellStuff root projEnvName Bash </> "bashrc"
 
-    bashrc = projectYxStuffDir project "_default" (ShellStuff Bash) </> "bashrc"
+    root = Text.unpack _path
+
+    getProjEnv cfg = case possiblyEnvName of
+        Just envName -> case lookupWhenProvided envName of
+            Just env -> pure env
+            Nothing -> error $ envName <> ": No such environment found."
+        Nothing -> case ProjectConfig.defaultEnvironment cfg of
+            Just (n, e) -> pure (Text.unpack n, e)
+            Nothing -> error "Unable to find default environment. Exaclty one\
+                \ environment has to have 'is-default: true', but no such\
+                \ environment was found."
+      where
+        lookupWhenProvided n =
+            (n, ) <$> ProjectConfig.getEnvironment cfg (fromString n)
 
 newProeject :: DbConnection -> FilePath -> IO Project
 newProeject conn relativeDir = do
@@ -143,75 +192,22 @@ newProeject conn relativeDir = do
     addProject conn project
     pure project
 
-findShell'
-    :: Maybe String
-    -- ^ Search path.
-    -> Maybe FilePath
-    -- ^ Preferred shell executable.
-    -> [FilePath] -> IO FilePath
-findShell' pathVar shellVar otherShells =
-    findShell path . maybe id (:) shellVar $ otherShells
-  where
-    path = maybe [] splitSearchPath pathVar
-
-findShell :: [FilePath] -> [FilePath] -> IO FilePath
-findShell path = go $ \case
-    r@(Just _) -> const $ pure r
-    Nothing -> \case
-        fp@('/' : _) -> do
-            isShell <- doesFileExist fp <&&> isExecutable fp
-            pure $ if isShell then Just fp else Nothing
-        fp -> findFileWith isExecutable path fp -- Windows support? (<.> exe)
-  where
-    go  :: (Maybe FilePath -> FilePath -> IO (Maybe FilePath))
-        -> [FilePath]
-        -> IO FilePath
-    go f = handleError . foldlM f Nothing
-
-    handleError :: IO (Maybe FilePath) -> IO FilePath
-    handleError =
-        fmap . fromMaybe $ error "Unable to find shell executable."
-
-    (<&&>) :: IO Bool -> IO Bool -> IO Bool
-    (<&&>) = liftA2 (&&)
-
-    isExecutable :: FilePath -> IO Bool
-    isExecutable = fmap executable . getPermissions
-
 modifyEnvVariables
     :: Project
+    -> EnvironmentName
     -> IO ([(String, String)] -> [(String, String)])
-modifyEnvVariables project = (. go) <$> addYxEnvVariables project
+modifyEnvVariables project projEnvName = (. go) <$> addYxEnvVariables project
   where
     go = (getRidOfStackEnvVariables .) . map $ \case
-        (n@"PATH", path) -> (n, updatePathEnvVariable project "_default" path)
+        (n@"PATH", path) -> (n, updatePathEnvVariable project projEnvName path)
             -- TODO: Correct implementation witouth hardcoded environment.
         ev -> ev
 
-data KnownShell = Bash
-
-data TypeOfStuff
-    = YxStuff
-    | EnvironmentStuff
-    | ExecutableStuff
-    | ShellStuff KnownShell
-    | CachedStuff
-
-projectYxStuffDir :: Project -> String -> TypeOfStuff -> FilePath
-projectYxStuffDir Project{_path = root} environment = (yxStuffRoot </>) . \case
-    YxStuff -> yxStuffRoot
-    EnvironmentStuff -> envDir
-    ExecutableStuff -> envDir </> "bin"
-    ShellStuff Bash -> envDir </> "bash"
-    CachedStuff -> "cache"
-  where
-    yxStuffRoot = Text.unpack root </> ".yx-stuff"
-    envDir = "env" </> environment
-
-updatePathEnvVariable :: Project -> String -> String -> String
+updatePathEnvVariable :: Project -> EnvironmentName -> String -> String
 updatePathEnvVariable project environment path = yxBinDir <> ":" <> path
   where
-    yxBinDir = projectYxStuffDir project environment ExecutableStuff
+    yxBinDir = yxExeStuff root environment
+    root = Text.unpack $ _path project
 
 getRidOfStackEnvVariables :: [(String, String)] -> [(String, String)]
 getRidOfStackEnvVariables = (catMaybes .) . map $ \case
@@ -231,7 +227,7 @@ getRidOfStackEnvVariables = (catMaybes .) . map $ \case
 addYxEnvVariables
     :: Project
     -> IO ([(String, String)] -> [(String, String)])
-addYxEnvVariables project@Project{..} = do
+addYxEnvVariables Project{..} = do
     yxExe <- getExecutablePath
     yxInvokedName <- getProgName
     pure . foldr (.) id $ catMaybes
@@ -246,57 +242,15 @@ addYxEnvVariables project@Project{..} = do
         ]
   where
     projectRoot = Text.unpack _path
-    projectEnvironment = "_default"
-    projectEnvironmentDir =
-        projectYxStuffDir project projectEnvironment EnvironmentStuff
-    yxStuffDir =
-        projectYxStuffDir project projectEnvironment YxStuff
+    yxStuffDir = yxStuffPath (Just projectRoot) YxStuff
+    projectEnvironment = "default"
+    projectEnvironmentDir = yxStuffPath (Just projectRoot) . EnvironmentStuff
+        $ Just projectEnvironment
 
     add :: String
         -> Maybe String
         -> Maybe ([(String, String)] -> [(String, String)])
     add n = fmap $ (:) . (n,)
-
-mkBashrc :: Project -> Environment -> String
-mkBashrc _ _ = unlines
-    [ "if [[ -e '/etc/bash.bashrc' ]]; then"
-    , "    source '/etc/bash.bashrc'"
-    , "fi"
-    , ""
-    , "function __yx_ps1()"
-    , "{"
-    , "    if [[ ! -v 'YX_VERSION' ]]; then"
-    , "        return"
-    , "    fi"
-    , ""
-    , "    if [[ -v 'YX_ENVIRONMENT' && \"${YX_ENVIRONMENT}\" != '_default' ]]"
-    , "    then"
-    , "        local yxEnv=\":${YX_ENVIRONMENT}\""
-    , "    fi"
-    , ""
-    , "    printf \"yx:%s%s\\n\" \"${YX_PROJECT}\" \"${yxEnv}\""
-    , "}"
-    , ""
-    , "function __yx_ps1_pretty()"
-    , "{"
-    , "    if [[ ! -v 'YX_VERSION' ]]; then"
-    , "        return"
-    , "    fi"
-    , ""
-    , "    printf \" (%s)\\n\" \"$(__yx_ps1)\""
-    , "}"
-    , ""
-    , "if [[ -e \"${HOME}/.bash_yx\" ]]; then"
-    , "    source \"${HOME}/.bash_yx\""
-    , "fi"
-    , ""
-    , "if [[ -e \"${YX_ENVIRONMENT_DIR}/bash/completion\" ]]; then"
-    , "    source \"${YX_ENVIRONMENT_DIR}/bash/completion\""
-    , "fi"
-    ]
-
-mkCompletion :: Project -> Environment -> String
-mkCompletion _ _ = ""
 
 getYxConfigDir :: IO FilePath
 getYxConfigDir = do
@@ -316,55 +270,3 @@ getYxDatabaseFile = do
                 \ path TEXT UNIQUE NOT NULL\
                 \);"
     pure dbFile
-
-data Environment = Environment
-    { envName :: Text
-    }
-
-data ProjectConfig = ProjectConfig
-    { _scm :: Text
-    , _environments :: [Environment]
-    }
-
-initYxStuff :: Project -> ProjectConfig -> IO ()
-initYxStuff project ProjectConfig{..} = forM_ _environments $ \env -> do
-    let name = Text.unpack $ envName env
-        envDir = projectYxStuffDir project name  EnvironmentStuff
-        binDir = envDir </> "bin"
-        bashDir = envDir </> "bash"
-    mapM_ (createDirectoryIfMissing True) [binDir, bashDir]
-
-    let bashrc = bashDir </> "bashrc"
-    haveBashrc <- doesFileExist bashrc
-    unless haveBashrc
-        . writeFile bashrc $ mkBashrc project env
-
-    let buildCmd = binDir </> "build"
-    haveBuildCmd <- doesFileExist buildCmd
-    unless haveBuildCmd $ do
-        yxExe <- getExecutablePath
-        createSymbolicLink yxExe buildCmd
-
-    let bldCmd = binDir </> "bld"
-    haveBuildCmd <- doesFileExist bldCmd
-    unless haveBuildCmd $ do
-        yxExe <- getExecutablePath
-        createSymbolicLink yxExe bldCmd
-
-{- TODO:
-    let root = projectRoot project
-        yxConfig = root </> "xy.yaml"
-        yxConfig' = root </> "xy.yml"
-    haveYxConfig <- doesDirectoryExist yxConfig
-        <||> doesDirectoryExist yxConfig'
-    unless haveYxConfig $ mkYxConfig >>= writeFile yxConfig
-
-    (<||>) :: IO Bool -> IO Bool -> IO Bool
-    (<||>) = liftA2 (||)
-
-projectRoot :: Project -> FilePath
-projectRoot = Text.unpack . #path
-
-mkYxConfig :: Project -> ProjectConfig -> IO String
-mkYxConfig =
--}

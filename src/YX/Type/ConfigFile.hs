@@ -14,6 +14,7 @@ import Data.Eq (Eq)
 import Data.Function (($))
 import Data.Functor ((<$>))
 import Data.Maybe (Maybe(Just, Nothing))
+import Data.Monoid ((<>))
 import Data.Tuple (uncurry)
 import GHC.Generics (Generic)
 import Text.Read (Read)
@@ -31,7 +32,7 @@ import Data.Aeson
 import qualified Data.Aeson as Aeson (object, withObject)
 import Data.Default (def)
 import Data.HashMap.Strict (HashMap)
-import qualified Data.HashMap.Strict as HashMap (empty)
+import qualified Data.HashMap.Strict as HashMap (empty, filter, lookup, toList)
 import Data.Text (Text)
 import qualified Data.Yaml as Yaml (ParseException, decodeFileEither)
 
@@ -93,10 +94,19 @@ data ProjectConfig = ProjectConfig
   deriving (Eq, Generic, Read, Show)
 
 instance FromJSON ProjectConfig where
-    parseJSON = Aeson.withObject "ProjectConfig" $ \o -> ProjectConfig
+    parseJSON = Aeson.withObject "ProjectConfig" $ \o -> join $ mk
         <$> o .:? "scm" .!= def
         <*> o .:? "build-tool" .!= def
         <*> o .:? "environment" .!= HashMap.empty
+      where
+        mk s b e = case HashMap.toList $ HashMap.filter _isDefault e of
+            [] -> err "no such environment was found"
+            [_] -> pure $ ProjectConfig s b e
+            _ -> err "multiple such environments were found"
+
+        err rest = fail
+            $ "Exactly one environment has to have 'is-default: true', but "
+            <> rest <> "."
 
 instance ToJSON ProjectConfig where
     toJSON ProjectConfig{..} = Aeson.object
@@ -107,3 +117,15 @@ instance ToJSON ProjectConfig where
 
 parseProjectConfig :: FilePath -> IO (Either Yaml.ParseException ProjectConfig)
 parseProjectConfig = Yaml.decodeFileEither
+
+defaultEnvironment :: ProjectConfig -> Maybe (Text, Environment)
+defaultEnvironment p = case HashMap.toList defaultEnvs of
+    [] -> Nothing
+    [x] -> Just x
+    _ -> Nothing
+  where
+    defaultEnvs = HashMap.filter _isDefault $ _environments p
+
+getEnvironment :: ProjectConfig -> Text -> Maybe Environment
+getEnvironment ProjectConfig{_environments = envs} name =
+    HashMap.lookup name envs

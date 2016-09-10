@@ -24,10 +24,11 @@ executable yx
   hs-source-dirs:       src
   main-is:              Main.hs
   other-modules:
-    --Options.Applicative.Standard
-    --Options.Applicative.Standard.Arguments
-    YX.Main
     YX.Initialize
+    YX.Main
+    YX.Paths
+    YX.Shell
+    YX.Shell.Bash
     YX.Type.BuildTool
     YX.Type.CommandType
     YX.Type.ConfigFile
@@ -67,6 +68,7 @@ executable yx
 
     -- Not on Hackage:
     , maybe-either
+    , lifted
 
   ghc-options:          -Wall
   if flag(pedantic)
