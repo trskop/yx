@@ -104,6 +104,8 @@ projects. This will trigger YX project initialization.
 * Support for storing output of "wrapped" commands for further analysis. For
   example, one may want to use build error to try automatically fix the issue.
 
+* Detect presence of right development tools, e.g. `cmake >=3.0.2`.
+
 
 Usage
 -----
