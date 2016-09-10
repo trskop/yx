@@ -1,6 +1,7 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards #-}
 module YX.Type.ConfigFile
   where
 
@@ -19,8 +20,15 @@ import Text.Read (Read)
 import Text.Show (Show)
 import System.IO (FilePath, IO)
 
-import Data.Aeson (FromJSON(parseJSON), {-ToJSON(toJSON),-} (.!=), (.:), (.:?))
-import qualified Data.Aeson as Aeson (withObject)
+import Data.Aeson
+    ( FromJSON(parseJSON)
+    , ToJSON(toJSON)
+    , (.!=)
+    , (.:)
+    , (.:?)
+    , (.=)
+    )
+import qualified Data.Aeson as Aeson (object, withObject)
 import Data.Default (def)
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HashMap (empty)
@@ -40,15 +48,22 @@ data Executable = Executable
   deriving (Eq, Generic, Read, Show)
 
 instance FromJSON Executable where
-    parseJSON = Aeson.withObject "Executable" $ \o -> join $ mkExecutable
+    parseJSON = Aeson.withObject "Executable" $ \o -> join $ mk
         <$> o .:? "type" .!= def
         <*> o .: "command"
         <*> o .:? "env"
       where
-        mkExecutable t c e = uncurry (\t' -> Executable t' c) <$> case (t, e) of
+        mk t c e = uncurry (\t' -> Executable t' c) <$> case (t, e) of
             (Command, _) -> pure (t, e)
             (_, Nothing) -> pure (t, e)
             (_, Just  _) -> fail "\"env\" can only be used wiht type=command"
+
+instance ToJSON Executable where
+    toJSON Executable{..} = Aeson.object
+        [ "type" .= _type
+        , "command" .= _command
+        , "env" .= _environment
+        ]
 
 data Environment = Environment
     { _env :: HashMap Text Text
@@ -63,6 +78,13 @@ instance FromJSON Environment where
         <*> o .:? "bin" .!= HashMap.empty
         <*> o .:? "is-default" .!= False
 
+instance ToJSON Environment where
+    toJSON Environment{..} = Aeson.object
+        [ "env" .= _env
+        , "bin" .= _bin
+        , "is-default" .= _isDefault
+        ]
+
 data ProjectConfig = ProjectConfig
     { _scm :: SomeScm
     , _buildTool :: SomeBuildTool
@@ -75,6 +97,13 @@ instance FromJSON ProjectConfig where
         <$> o .:? "scm" .!= def
         <*> o .:? "build-tool" .!= def
         <*> o .:? "environment" .!= HashMap.empty
+
+instance ToJSON ProjectConfig where
+    toJSON ProjectConfig{..} = Aeson.object
+        [ "scm" .= _scm
+        , "build-tool" .= _buildTool
+        , "environment" .= _environments
+        ]
 
 parseProjectConfig :: FilePath -> IO (Either Yaml.ParseException ProjectConfig)
 parseProjectConfig = Yaml.decodeFileEither
