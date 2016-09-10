@@ -224,27 +224,34 @@ environment:
 
     # Add or modify environment variables of the isolated execution
     # environment.
-    #env:
+    env:
     #  PATH: "/some/path/bin:${PATH}"
 
     # Add following commands/executables in to the isolated execution
     # environment.
-    #bin:
-    #  stack:
-    #    type: command
-    #    command: stack build
-    #    env:
-    #      STACK_YAML: ${YX_PROJECT_ROOT}/stack-production.yaml
     #
-    #  build:
-    #    type: alias
-    #    command: ${YX_ENVIRONMENT_DIR}/bin/stack build
-    #
-    #  lint:
-    #    type: symlink
-    #    command: /opt/hlint/bin/hlint
-    #
-    #  hoogle:
-    #    type: alias
-    #    command: "stack exec hoogle --"
+    # When creating symlink, the command has always have to be absolute path to
+    # the executable.
+    bin:
+      #stack:
+      #  type: command
+      #  command: stack
+      #  env:
+      #    STACK_YAML: ${YX_PROJECT_ROOT}/stack-production.yaml
+      #
+      #build:
+      #  type: alias
+      #  command: ${YX_ENVIRONMENT_DIR}/bin/stack build
+      #
+      #alex:
+      #  type: symlink
+      #  command: /opt/alex/3.1.7/bin/alex
+      #
+      #happy:
+      #  type: symlink
+      #  command: /opt/happy/1.19.5/bin/happy
+      #
+      #hoogle:
+      #  type: alias
+      #  command: "stack exec hoogle --"
 ```
