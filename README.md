@@ -46,7 +46,7 @@ database. If it succeeded in find one project then it will do the following:
 2. Create a bunch of symlinks to its self. These behave as an advanced shell
    `alias`.
 
-3. It will cleanup environment variables, and it will following variables:
+3. It will cleanup environment variables, and also add following variables:
 
     - `YX_ENVIRONMENT` --- Contains the name of project environment.
 
@@ -100,6 +100,9 @@ projects. This will trigger YX project initialization.
 
 * Support for running isolated environment inside a container (Docker or rkt).
   This shouldn't be so hard.
+
+* Support for storing output of "wrapped" commands for further analysis. For
+  example, one may want to use build error to try automatically fix the issue.
 
 
 Usage
@@ -224,7 +227,21 @@ environment:
     # Add following commands/executables in to the isolated execution
     # environment.
     #bin:
-    #  build: {command: stack build}
-    #  lint: {symlink: /opt/hlint/bin/hlint}
-    #  hoogle: {alias: "stack exec hoogle --"}
+    #  stack:
+    #    type: command
+    #    command: stack build
+    #    env:
+    #      STACK_YAML: ${YX_PROJECT_ROOT}/stack-production.yaml
+    #
+    #  build:
+    #    type: alias
+    #    command: ${YX_ENVIRONMENT_DIR}/bin/stack build
+    #
+    #  lint:
+    #    type: symlink
+    #    command: /opt/hlint/bin/hlint
+    #
+    #  hoogle:
+    #    type: alias
+    #    command: "stack exec hoogle --"
 ```
