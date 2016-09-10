@@ -29,6 +29,7 @@ executable yx
     YX.Main
     YX.Initialize
     YX.Type.BuildTool
+    YX.Type.CommandType
     YX.Type.ConfigFile
     YX.Type.DbConnection
     YX.Type.RuntimeConfig

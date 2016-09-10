@@ -4,7 +4,7 @@
 module YX.Type.ConfigFile
   where
 
-import Control.Applicative ((<*>), empty, pure)
+import Control.Applicative ((<*>), pure)
 import Control.Monad (join)
 import Control.Monad.Fail (fail)
 import Data.Bool (Bool(False))
@@ -20,8 +20,7 @@ import Text.Show (Show)
 import System.IO (FilePath, IO)
 
 import Data.Aeson (FromJSON(parseJSON), {-ToJSON(toJSON),-} (.!=), (.:), (.:?))
-import qualified Data.Aeson as Aeson (withObject, withText)
-import qualified Data.CaseInsensitive as CI (mk)
+import qualified Data.Aeson as Aeson (withObject)
 import Data.Default (def)
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HashMap (empty)
@@ -29,18 +28,9 @@ import Data.Text (Text)
 import qualified Data.Yaml as Yaml (ParseException, decodeFileEither)
 
 import YX.Type.BuildTool (SomeBuildTool)
+import YX.Type.CommandType (CommandType(Command))
 import YX.Type.Scm (SomeScm)
 
-
-data CommandType = Command | Symlink | Alias
-  deriving (Eq, Generic, Read, Show)
-
-instance FromJSON CommandType where
-    parseJSON = Aeson.withText "CommandType" $ \t -> case CI.mk t of
-        "command" -> pure Command
-        "symlink" -> pure Symlink
-        "alias" -> pure Alias
-        _ -> empty
 
 data Executable = Executable
     { _type :: CommandType
@@ -51,11 +41,10 @@ data Executable = Executable
 
 instance FromJSON Executable where
     parseJSON = Aeson.withObject "Executable" $ \o -> join $ mkExecutable
-        <$> o .:? "type" .!= Command
+        <$> o .:? "type" .!= def
         <*> o .: "command"
         <*> o .:? "env"
       where
---      mkExecutable :: CommandType -> Text -> Maybe Environment -> Aeson.Parser
         mkExecutable t c e = uncurry (\t' -> Executable t' c) <$> case (t, e) of
             (Command, _) -> pure (t, e)
             (_, Nothing) -> pure (t, e)
