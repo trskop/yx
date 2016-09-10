@@ -8,15 +8,18 @@ import Control.Monad (foldM, return)
 import Data.Bool (Bool, not)
 import Data.Function (($), (.))
 import Data.Functor ((<$>))
-import qualified Data.List as List (null)
+import qualified Data.List as List (map, null)
+import Data.List.NonEmpty (NonEmpty((:|)))
+import qualified Data.List.NonEmpty as NonEmpty (toList)
 import Data.Maybe (Maybe(Just, Nothing))
 import Data.Monoid ((<>))
+import Data.String (String)
 import System.IO (FilePath, IO)
 
 import Data.Text (Text)
 import qualified Data.Text as Text (unlines)
-import System.Directory (doesDirectoryExist)
-import System.FilePath ((</>))
+import System.Directory (doesDirectoryExist, doesFileExist)
+import System.FilePath ((</>), (<.>))
 import System.FilePath.Glob (globDir1)
 import qualified System.FilePath.Glob as Glob (compile)
 
@@ -27,6 +30,7 @@ import qualified YX.Type.BuildTool as BuildTool (toText)
 
 
 type ProjectRoot = FilePath
+type GlobPattern = String
 
 createProjectConfig :: ProjectRoot -> IO Text
 createProjectConfig root = do
@@ -58,9 +62,23 @@ createProjectConfig root = do
         , "    # Add following commands/executables in to the isolated execution\
             \ environment."
         , "    #bin:"
-        , "    #  build: {command: stack build}"
-        , "    #  lint: {symlink: /opt/hlint/bin/hlint}"
-        , "    #  hoogle: {alias: \"stack exec hoogle --\"}"
+        , "    #  stack:"
+        , "    #    type: command"
+        , "    #    command: stack build"
+        , "    #    env:"
+        , "    #      STACK_YAML: ${YX_PROJECT_ROOT}/stack-production.yaml"
+        , "    #"
+        , "    #  build:"
+        , "    #    type: alias"
+        , "    #    command: ${YX_ENVIRONMENT_DIR}/bin/stack build"
+        , "    #"
+        , "    #  lint:"
+        , "    #    type: symlink"
+        , "    #    command: /opt/hlint/bin/hlint"
+        , "    #"
+        , "    #  hoogle:"
+        , "    #    type: alias"
+        , "    #    command: \"stack exec hoogle --\""
         ]
   where
     field :: Text -> Text -> Text
@@ -78,11 +96,27 @@ detectVersionControl root = detect
 
 detectBuildTool :: ProjectRoot -> IO (Maybe BuildTool)
 detectBuildTool root = detect
-    [ glob "stack*.yaml" ~> Stack
-    , glob "stack*.cabal" ~> Cabal
+    [ glob root "stack*.yaml" ~> Stack
+    , glob root "stack*.cabal" ~> Cabal
     ]
+
+yxConfigs :: NonEmpty FilePath
+yxConfigs = yxYaml :| [yxYml]
   where
-    glob pattern = not . List.null <$> globDir1 (Glob.compile pattern) root
+    yxBase = "yx"
+    yxYaml = yxBase <.> "yaml"
+    yxYml = yxBase <.> "yml"
+
+detectYxConfig :: ProjectRoot -> IO (Maybe FilePath)
+detectYxConfig root =
+    detect . List.map doesConfigExist $ NonEmpty.toList yxConfigs
+  where
+    doesConfigExist cfg = doesFileExist (root </> cfg) ~> cfg
+
+-- {{{ Utility functions ------------------------------------------------------
+
+glob :: ProjectRoot -> GlobPattern -> IO Bool
+glob root pattern = not . List.null <$> globDir1 (Glob.compile pattern) root
 
 (~>) :: IO Bool -> a -> (IO Bool, a)
 (~>) = (,)
@@ -96,3 +130,5 @@ detect = foldM go Nothing
         return $ if isThisOne
             then Just a
             else Nothing
+
+-- }}} Utility functions ------------------------------------------------------
