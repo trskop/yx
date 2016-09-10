@@ -77,6 +77,7 @@ import YX.Paths
     , yxStuffFile
     , yxStuffPath
     )
+import YX.Shell.Bash (mkBashrc)
 import YX.Type.BuildTool (BuildTool(Cabal, Stack))
 import qualified YX.Type.BuildTool as BuildTool (toText)
 import YX.Type.CommandType (CommandType(Alias, Command, Symlink))
@@ -159,7 +160,7 @@ doYxStuff cfgRef root defaultYxConfig possibleYxConfig = shake opts $ do
         () <$ compileProjectCfg out
 
     yxShellStuff root "*" Bash </> "bashrc" %> \out -> do
-        Shake.need [yxConfig, cfgCacheFile]
+        Shake.need [cfgCacheFile]
         cfg <- getProjectCfg cfgCacheFile
         compileBashrc cfg (FilePath.makeRelative yxEnvStuff out) out
 
@@ -210,6 +211,7 @@ doYxStuff cfgRef root defaultYxConfig possibleYxConfig = shake opts $ do
 
     envDependencies name Environment{_bin = bins} = do
         needBin name "yx"
+        Shake.need [yxShellStuff root (Text.unpack name) Bash </> "bashrc"]
         forHM_ bins $ \exeName Executable{_type = t} -> case t of
             Alias   -> pure ()  -- Aliases are handled by shell.
             Command -> needBin name exeName
@@ -259,10 +261,16 @@ createExecutableLink src dst = liftIO $ do
     Posix.createSymbolicLink src dst
 
 compileBashrc :: ProjectConfig -> FilePath -> FilePath -> Shake.Action ()
-compileBashrc cfg relativeOut out = compileBashrc cfg relativeOut out
+compileBashrc cfg relativeOut out =
+    liftIO . Text.writeFile out . mkBashrc cfg $ fromString envName
+  where
+    envName =
+        FilePath.dropTrailingPathSeparator $ FilePath.takeDirectory relativeOut
 
+{-
 prepareExecutable :: ProjectConfig -> FilePath -> FilePath -> Shake.Action ()
 prepareExecutable cfg relativeOut out = prepareExecutable cfg relativeOut out
+-}
 
 -- {{{ Project Configuration File ---------------------------------------------
 

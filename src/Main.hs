@@ -85,9 +85,9 @@ main :: IO ()
 main = do
     getProgName >>= \case
         "yx" -> yxMain
-        other -> yxExec other
+        other -> getArgs >>= yxExec other
   where
-    yxExec alias = do
+    yxExec alias args = do
         lookupEnv "YX_VERSION" >>= \case
             Nothing -> error "Not in an YX environment."
             Just _ -> pure ()
@@ -113,7 +113,7 @@ main = do
               | _type /= Command -> errInvalidAlias alias
               | otherwise        -> case words (Text.unpack _command) of
                 [] -> error $ alias <> ": Invalid configuration of this alias."
-                cmd : args -> executeFile cmd True args Nothing
+                cmd : cmdArgs -> executeFile cmd True (cmdArgs <> args) Nothing
 
     errInvalidAlias cmd = error $ cmd <> ": YX called with invalid alias."
 

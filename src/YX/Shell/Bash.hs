@@ -3,13 +3,13 @@
 module YX.Shell.Bash
   where
 
-import Data.Text (Text, unlines)
+import Data.Text (Text)
+import qualified Data.Text as Text (unlines)
 
-import YX.Paths (EnvironmentName)
 import YX.Type.ConfigFile (ProjectConfig)
 
 
-mkBashrc :: ProjectConfig -> EnvironmentName -> Text
+mkBashrc :: ProjectConfig -> Text -> Text
 mkBashrc _ _ = Text.unlines
     [ "if [[ -e '/etc/profile' ]]; then"
     , "    source '/etc/profile'"
@@ -40,6 +40,8 @@ mkBashrc _ _ = Text.unlines
     , "    printf \" (%s)\\n\" \"$(__yx_ps1)\""
     , "}"
     , ""
+    , "PS1='\\u@\\h:\\w $(__yx_ps1_pretty)\\$ '"
+    , ""
     , "if [[ -e \"${HOME}/.bash_yx\" ]]; then"
     , "    source \"${HOME}/.bash_yx\""
     , "fi"
@@ -53,8 +55,8 @@ mkBashrc _ _ = Text.unlines
     , "fi"
     ]
 
-mkCompletion :: ProjectConfig -> EnvironmentName -> Text
+mkCompletion :: ProjectConfig -> Text -> Text
 mkCompletion _ _ = ""
 
-mkEnvironment :: ProjectConfig -> EnvironmentName -> Text
+mkEnvironment :: ProjectConfig -> Text -> Text
 mkEnvironment _ _ = ""
