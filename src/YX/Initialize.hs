@@ -146,8 +146,8 @@ doYxStuff cfgRef root defaultYxConfig possibleYxConfig = shake opts $ do
         -- configuration.
         haveConfig <- doesFileExist out
         unless haveConfig $ liftIO $ do
-            IO.putStrLn $ out
-                <> ": Generating YX configuration file for this project..."
+            IO.putStrLn $ "Generating YX configuration file for this project: "
+                <> FilePath.makeRelative root out
             createProjectConfig root >>= Text.writeFile out
 
     cfgCacheFile %> \out -> do
@@ -162,7 +162,20 @@ doYxStuff cfgRef root defaultYxConfig possibleYxConfig = shake opts $ do
     yxShellStuff root "*" Bash </> "bashrc" %> \out -> do
         Shake.need [cfgCacheFile]
         cfg <- getProjectCfg cfgCacheFile
+        printGeneratingBashrc out
         compileBashrc cfg (FilePath.makeRelative yxEnvStuff out) out
+
+    yxShellStuff root "*" Bash </> "completion" %> \out -> do
+        printGeneratingBashrc out
+        -- TODO
+
+    yxShellStuff root "*" Bash </> "environment" %> \out -> do
+        printGeneratingBashrc out
+        -- TODO
+
+    yxShellStuff root "*" Bash </> "aliases" %> \out -> do
+        printGeneratingBashrc out
+        -- TODO
 
     -- Combinator 'Shake.alternatives' allows us to use overlapping patterns.
     Shake.alternatives $ do
@@ -170,7 +183,7 @@ doYxStuff cfgRef root defaultYxConfig possibleYxConfig = shake opts $ do
         -- separately to make that fact explicit.
         yxExeStuff root "*" </> "yx" %> \out -> do
             yxExe <- liftIO getExecutablePath
-            createExecutableLink yxExe out
+            createExecutableLink root yxExe out
 
         yxExeStuff root "*" </> "*" %> \out -> do
             Shake.need [cfgCacheFile]
@@ -181,9 +194,9 @@ doYxStuff cfgRef root defaultYxConfig possibleYxConfig = shake opts $ do
                     <> ": Trying to create binary, but shell alias was found."
                 Command -> do
                     yxExe <- liftIO getExecutablePath
-                    createExecutableLink yxExe out
+                    createExecutableLink root yxExe out
                 Symlink ->
-                    createExecutableLink (Text.unpack $ _command exe) out
+                    createExecutableLink root (Text.unpack $ _command exe) out
 
     -- Top level rule:
     "yx-initialization" ~> do
@@ -245,8 +258,11 @@ doYxStuff cfgRef root defaultYxConfig possibleYxConfig = shake opts $ do
         exeName' = fromString exeName
         envName' = fromString envName
 
-createExecutableLink :: FilePath -> FilePath -> Shake.Action ()
-createExecutableLink src dst = liftIO $ do
+    printGeneratingBashrc out = liftIO . IO.putStrLn
+        $ "Generating Bash *rc script: " <> FilePath.makeRelative root out
+
+createExecutableLink :: FilePath -> FilePath -> FilePath -> Shake.Action ()
+createExecutableLink root src dst = liftIO $ do
     srcExists <- doesFileExist src
     unless srcExists . error
         $ src <> ": File not found when trying to create symbolic link: "
@@ -257,7 +273,8 @@ createExecutableLink src dst = liftIO $ do
     dstExists <- doesFileExist dst
     when dstExists $ removeFile dst
 
-    IO.putStrLn $ "Creating symbolic link: " <> src <> " --> " <> dst
+    IO.putStrLn $ "Creating symbolic link: " <> src <> " --> "
+        <> FilePath.makeRelative root dst
     Posix.createSymbolicLink src dst
 
 compileBashrc :: ProjectConfig -> FilePath -> FilePath -> Shake.Action ()
