@@ -40,7 +40,7 @@ mkBashrc _ _ = Text.unlines
     , "    printf \" (%s)\\n\" \"$(__yx_ps1)\""
     , "}"
     , ""
-    , "PS1='\\u@\\h:\\w $(__yx_ps1_pretty)\\$ '"
+    , "PS1='\\u@\\h:\\w$(__yx_ps1_pretty)\\$ '"
     , ""
     , "if [[ -e \"${HOME}/.bash_yx\" ]]; then"
     , "    source \"${HOME}/.bash_yx\""
