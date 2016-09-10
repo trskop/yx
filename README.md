@@ -17,10 +17,11 @@ Terminology
   Anything that is inside that directory is considered a project. For example
   application source code.
 
-* **Environment** --- is a set of task necessary for setting up tooling for
+* **Environment** --- is a set of tasks necessary for setting up tooling for
   development/building/etc. One **Project** can have multiple **Environments**.
-  For example when the same project is built with multiple versions of
-  of a compiler then environment is a configuration for just one of them.
+  For example when the same project is built with multiple versions of of a
+  compiler, then one environment is a configuration for a specifc compiler
+  version.
 
 
 What YX Is Not
