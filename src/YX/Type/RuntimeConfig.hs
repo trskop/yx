@@ -9,6 +9,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE OverloadedLabels #-}
 module YX.Type.RuntimeConfig
   where
 
@@ -21,38 +22,63 @@ import Data.Bool (Bool(False, True))
 import Data.Function (($))
 import Data.IORef (IORef, atomicModifyIORef', newIORef, readIORef)
 import Data.Maybe (Maybe(Just, Nothing))
+import Data.Version (Version)
 import GHC.Generics (Generic)
 import System.IO (FilePath, IO)
 
 import Data.Default (def)
-import Data.OverloadedLabels.TH (labels)
 import Data.OverloadedRecords ((:::), R, get)
 import Data.OverloadedRecords.TH (overloadedRecord)
 import qualified Database.SQLite.Simple as SQLite (close, open)
 
 import YX.Type.DbConnection (DbConnection(DbConnection))
+import YX.Type.ConfigFile (EnvironmentName, ProjectConfig)
+
+import qualified Paths_yx as YX (version)
 
 
 data RuntimeConfig = RuntimeConfig
-    { _dbConnection :: !(IO DbConnection)
+    { _yxVersion :: Version
+    , _yxInvokedAs :: FilePath
+    , _yxExe :: FilePath
+    , _projectConfig :: Maybe ProjectConfig
+    , _currentEnvironment :: Maybe EnvironmentName
+
+    , _dbConnection :: !(IO DbConnection)
     , _closeDbConnection :: !(IO ())
     }
   deriving (Generic)
 
 overloadedRecord def ''RuntimeConfig
 
-labels ["database", "dbConnection"]
+type MkRuntimeConfigParams =
+    '[ "database" ::: FilePath
+    , "yxInvokedAs" ::: FilePath
+    , "yxExe" ::: FilePath
+    , "projectConfig" ::: Maybe ProjectConfig
+    , "currentEnvironment" ::: Maybe EnvironmentName
+    ]
 
 mkRuntimeConfig
-    :: R '["database" ::: FilePath] opts
+    :: R MkRuntimeConfigParams opts
     => opts
     -> IO RuntimeConfig
 mkRuntimeConfig opts = do
     dbConnRef <- newIORef Nothing
-    pure $! RuntimeConfig
-        (mkGetDbConnection (get database opts) dbConnRef)
+    pure $! mkRuntimeConfig'
+        (mkGetDbConnection (get #database opts) dbConnRef)
         (mkCloseDbConnection dbConnRef)
   where
+    mkRuntimeConfig' getConn closeConn = RuntimeConfig
+        { _yxVersion = YX.version
+        , _yxInvokedAs = get #yxInvokedAs opts
+        , _yxExe = get #yxExe opts
+        , _projectConfig = get #projectConfig opts
+        , _currentEnvironment = get #currentEnvironment opts
+        , _dbConnection = getConn
+        , _closeDbConnection = closeConn
+        }
+
     mkGetDbConnection
         :: FilePath
         -> IORef (Maybe DbConnection)
@@ -90,4 +116,4 @@ withDbConnection
     => r
     -> (DbConnection -> IO a)
     -> IO a
-withDbConnection r = (get dbConnection r >>=)
+withDbConnection r = (get #dbConnection r >>=)

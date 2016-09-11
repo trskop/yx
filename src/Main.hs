@@ -66,6 +66,7 @@ import YX.Paths
     , yxStuffPath
     , yxStuffFile
     )
+import YX.ProcessEnvironmentVariables ()    -- Force build.
 import YX.Shell (Shell(Bash), findShell, shellExePaths)
 import YX.Type.CommandType (CommandType(Command))
 import YX.Type.ConfigFile (Executable(Executable){-, ProjectConfig-})

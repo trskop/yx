@@ -3,6 +3,21 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 module YX.Type.ConfigFile
+    (
+    -- * Executable
+      ExecutableName
+    , Executable(..)
+
+    -- * Environment
+    , EnvironmentName
+    , Environment(..)
+
+    -- * ProjectConfig
+    , ProjectConfig(..)
+    , parseProjectConfig
+    , defaultEnvironment
+    , getEnvironment
+    )
   where
 
 import Control.Applicative ((<*>), pure)
@@ -41,10 +56,20 @@ import YX.Type.CommandType (CommandType(Command))
 import YX.Type.Scm (SomeScm)
 
 
+-- {{{ Executable -------------------------------------------------------------
+
+-- TODO: Move to a separate file.
+
+type ExecutableName = Text
+
 data Executable = Executable
     { _type :: CommandType
     , _command :: Text
     , _environment :: Maybe Environment
+
+    -- TODO:
+    --, _preHook :: Text
+    --, _postHook :: Text
     }
   deriving (Eq, Generic, Read, Show)
 
@@ -66,9 +91,17 @@ instance ToJSON Executable where
         , "env" .= _environment
         ]
 
+-- }}} Executable -------------------------------------------------------------
+
+-- {{{ Environment ------------------------------------------------------------
+
+-- TODO: Move to a separate file.
+
+type EnvironmentName = Text
+
 data Environment = Environment
-    { _env :: HashMap Text Text
-    , _bin :: HashMap Text Executable
+    { _env :: HashMap EnvironmentName Text
+    , _bin :: HashMap ExecutableName Executable
     , _isDefault :: Bool
     }
   deriving (Eq, Generic, Read, Show)
@@ -86,10 +119,16 @@ instance ToJSON Environment where
         , "is-default" .= _isDefault
         ]
 
+-- }}} Environment ------------------------------------------------------------
+
+-- {{{ ProjectConfig ----------------------------------------------------------
+
 data ProjectConfig = ProjectConfig
     { _scm :: SomeScm
     , _buildTool :: SomeBuildTool
     , _environments :: HashMap Text Environment
+    -- TODO:
+    --, _global :: GlobalEnvironment
     }
   deriving (Eq, Generic, Read, Show)
 
@@ -129,3 +168,5 @@ defaultEnvironment p = case HashMap.toList defaultEnvs of
 getEnvironment :: ProjectConfig -> Text -> Maybe Environment
 getEnvironment ProjectConfig{_environments = envs} name =
     HashMap.lookup name envs
+
+-- }}} ProjectConfig ----------------------------------------------------------

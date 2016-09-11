@@ -27,6 +27,7 @@ executable yx
     YX.Initialize
     YX.Main
     YX.Paths
+    YX.ProcessEnvironmentVariables
     YX.Shell
     YX.Shell.Bash
     YX.Type.BuildTool
