@@ -13,7 +13,7 @@ import Control.Monad ((>>=), foldM, unless, when)
 import Control.Monad.IO.Class (liftIO)
 import Data.Bool (Bool(False, True), (||), not, otherwise)
 import Data.Either (Either(Left, Right))
-import Data.Function (($), (.), flip)
+import Data.Function (($), (.), const, flip)
 import Data.Functor ((<$), (<$>))
 import Data.IORef (IORef, atomicWriteIORef, newIORef, readIORef)
 import qualified Data.List as List (map, null)
@@ -23,7 +23,7 @@ import Data.Monoid ((<>))
 import Data.String (String, fromString)
 import System.IO (FilePath, IO)
 import qualified System.IO as IO ({-print,-} putStrLn)
-import Text.Show (Show)
+import Text.Show (Show, show)
 
 import qualified Data.Aeson as Aeson (eitherDecode', encode)
 import qualified Data.ByteString.Lazy as Lazy.ByteString (readFile, writeFile)
@@ -348,7 +348,13 @@ parseAndCacheYxConfig yxConfig out = parseProjectConfig yxConfig >>= \case
 createProjectConfig :: ProjectRoot -> IO Text
 createProjectConfig root = do
     scm <- detectVersionControl root
+    putJustStrLn scm $ \tool ->
+        "  ... detected " <> show tool <> " as a SCM"
+
     buildTool <- detectBuildTool root
+    putJustStrLn buildTool $ \tool ->
+        "  ... detected " <> show tool <> " as a build tool."
+
     pure $ Text.unlines
         [ "# Source Code Management (SCM) tool used by the project."
         , "# Currently only 'Git' is recognized automatically."
@@ -436,6 +442,11 @@ detectBuildTool root = detect
 -- }}} Tooling Detection ------------------------------------------------------
 
 -- {{{ Utility functions ------------------------------------------------------
+
+putJustStrLn :: Maybe a -> (a -> String) -> IO ()
+putJustStrLn = \case
+    Nothing -> const $ pure ()
+    Just s -> IO.putStrLn . ($ s)
 
 glob :: ProjectRoot -> GlobPattern -> IO Bool
 glob root pattern = not . List.null <$> globDir1 (Glob.compile pattern) root
