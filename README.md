@@ -225,6 +225,60 @@ scm: "Git"
 # Currently only 'Cabal' and 'Stack' are recognized automatically.
 build-tool: Stack
 
+global:
+  env:
+    # User can override these variables in "${HOME}/.bash_yx", that is usually
+    # necessary on systems with different installation paths for these tools.
+    YX_STACK_EXE: /usr/bin/stack
+    YX_GIT_EXE: /usr/bin/git
+
+  bin:
+    stack:
+      type: command
+      command: ${YX_STACK_EXE}
+
+    git:
+      type: command
+      command: ${YX_GIT_EXE}
+      env:
+        #GIT_MERGE_VERBOSITY: 5
+
+  build-tool:
+    stack:
+      version: >=1.1
+
+  scm:
+    git:
+      version: >=1.9
+
+      config:
+        #core.editor: vim
+        #commit.template: ${YX_PROJECT_ROOT}/dev-tools/git-commit.template
+        #core.pager: less
+        #merge.ff: only
+        #pull.rebase: true
+        #color.ui: true
+
+      hooks:
+        # Committing-Workflow Hooks
+        #pre-commit:
+        #prepare-commit-msg:
+        #commit-msg:
+        #post-commit:
+
+        # Email Workflow Hooks
+        #applypatch-msg:
+        #pre-applypatch:
+        #post-applypatch:
+
+        # Other Client Hooks
+        #pre-rebase:
+        #post-rewrite:
+        #post-checkout:
+        #post-merge:
+        #pre-push:
+        #pre-auto-gc:
+
 # Environments for this project.
 environment:
   # Execution environment named "default". It is used when there is no
