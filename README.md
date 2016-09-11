@@ -30,9 +30,12 @@ What YX Is Not
 * **YX is not a build system.** Its purpose is to just simplify build system
   invocation without the need to always create a specialized build script that
   handles all the build system options. If you know Travis CI then `yx.yaml`
-  will remind you of its configuration file.
+  will remind you of its configuration file, but `yx.yaml` is not a
+  "executable" script.
 
 * **YX is not a package system.**
+
+* **YX is not a scriptiong language.**
 
 
 How Does YX Work
