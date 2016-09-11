@@ -21,7 +21,6 @@ import qualified Data.List.NonEmpty as NonEmpty (head, toList)
 import Data.Maybe (Maybe(Just, Nothing), fromMaybe)
 import Data.Monoid ((<>))
 import Data.String (String, fromString)
-import System.Environment (getExecutablePath)
 import System.IO (FilePath, IO)
 import qualified System.IO as IO ({-print,-} putStrLn)
 import Text.Show (Show)
@@ -95,26 +94,40 @@ import YX.Type.Shell (Shell(Bash))
 type GlobPattern = String
 
 -- | During initialization we only know where the project is, nothing more.
-initializeProject :: ProjectRoot -> IO ProjectConfig
-initializeProject root = do
+initializeProject
+    :: FilePath
+    -- ^ Absolute path to YX executable.
+    -> ProjectRoot
+    -- ^ Absolute path to project root directory. Everthing initiation does is
+    -- relative to this directory.
+    -> IO ProjectConfig
+initializeProject yxExe root = do
     possibleConfig <- detectYxConfig root
     cfgRef <- newIORef (Nothing :: Maybe ProjectConfig)
-    doYxStuff cfgRef root (root </> yxConfig) $ (root </>) <$> possibleConfig
+    doYxStuff cfgRef yxExe root defaultYxConfig $ (root </>) <$> possibleConfig
     readIORef cfgRef >>= \case
         Nothing -> readCachedYxConfig $ yxStuffFile root CachedStuff "config.bin"
         Just cfg -> pure cfg
   where
-    yxConfig = NonEmpty.head yxConfigs
+    defaultYxConfig = root </> NonEmpty.head yxConfigs
         -- First file is considered to be the default. See 'yxConfigs' for more
         -- details.
 
 doYxStuff
     :: IORef (Maybe ProjectConfig)
-    -> ProjectRoot
     -> FilePath
+    -- ^ Absolute path to YX executable.
+    -> ProjectRoot
+    -- ^ Absolute path to project root directory. Everthing initiation does is
+    -- relative to this directory.
+    -> FilePath
+    -- ^ Absolute path to YX project configuration, which is used when new one
+    -- has to be created.
     -> Maybe FilePath
+    -- ^ Possibly absolute path to existing YX project configuration. 'Nothing'
+    -- if there is no such file.
     -> IO ()
-doYxStuff cfgRef root defaultYxConfig possibleYxConfig = shake opts $ do
+doYxStuff cfgRef yxExe root defaultYxConfig possibleYxConfig = shake opts $ do
     getProjectCfg' <- Shake.newCache $ \(yxConfigChanged, cacheFile) -> liftIO
         $ let memo r = r <$ atomicWriteIORef cfgRef (Just r)
               getMemo = readIORef cfgRef
@@ -181,8 +194,7 @@ doYxStuff cfgRef root defaultYxConfig possibleYxConfig = shake opts $ do
     Shake.alternatives $ do
         -- Symbolic link to "yx" is a special case. We want to handle it
         -- separately to make that fact explicit.
-        yxExeStuff root "*" </> "yx" %> \out -> do
-            yxExe <- liftIO getExecutablePath
+        yxExeStuff root "*" </> "yx" %> \out ->
             createExecutableLink root yxExe out
 
         yxExeStuff root "*" </> "*" %> \out -> do
@@ -192,9 +204,7 @@ doYxStuff cfgRef root defaultYxConfig possibleYxConfig = shake opts $ do
             lookupExe cfg envName exeName >>= \exe -> case _type exe of
                 Alias -> error $ out
                     <> ": Trying to create binary, but shell alias was found."
-                Command -> do
-                    yxExe <- liftIO getExecutablePath
-                    createExecutableLink root yxExe out
+                Command -> createExecutableLink root yxExe out
                 Symlink ->
                     createExecutableLink root (Text.unpack $ _command exe) out
 

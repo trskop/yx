@@ -10,7 +10,7 @@ module Main (main)
 import Prelude (error)
 
 import Control.Applicative ((<*>), pure)
-import Control.Monad ((>>=), mapM_, unless)
+import Control.Monad ((=<<), (>>=), mapM_, unless)
 import Data.Bool (Bool(True), otherwise)
 import Data.Eq (Eq((/=)))
 import Data.Function (($), (.), id)
@@ -120,38 +120,47 @@ main = do
 yxMain :: IO ()
 yxMain = do
     dbFile <- getYxDatabaseFile
+    yxExe <- getExecutablePath
     getArgs >>= \case
-        "cd" : pattern : _ -> SQLite.withConnection dbFile $ \c -> do
-            let conn = DbConnection c
-            findProjects conn (modifyPattern pattern) >>= \case
-                [] -> do
-                    isADirectory <- doesDirectoryExist pattern
-                    if isADirectory
-                        then newProeject conn pattern
-                            >>= (`runProjectEnvironment` Nothing)
-                        else error "No such project found, try \"yx ls PATTERN\"."
-                [p] -> runProjectEnvironment p Nothing
-                ps -> printProjects ps
-
-        ["ls"] -> SQLite.withConnection dbFile $ \c ->
-            listProjects (DbConnection c) >>= printProjects
-
-        "ls" : pattern : _ -> SQLite.withConnection dbFile $ \c ->
-            findProjects (DbConnection c) (modifyPattern pattern)
-                >>= printProjects
-
+        "cd" : pattern : _ -> doCd dbFile yxExe pattern
+        ["ls"] -> doLs dbFile Nothing
+        "ls" : pattern : _ -> doLs dbFile $ Just pattern
         _ -> error "Unknown argument or option."
+
+doCd :: FilePath -> FilePath -> String -> IO ()
+doCd dbFile yxExe pattern = SQLite.withConnection dbFile $ \c -> do
+    let conn = DbConnection c
+    findProjects conn (modifyPattern pattern) >>= \case
+        [] -> do
+            isADirectory <- doesDirectoryExist pattern
+            if isADirectory
+                then newProject conn pattern >>= runProjEnv Nothing
+                else error "No such project found, try \"yx ls PATTERN\"."
+        [p] -> runProjEnv Nothing p
+        ps -> printProjects ps
   where
-    modifyPattern pat
-      | '*' `elem` pat = fromString pat
-      | otherwise      = fromString $ pat <> "*"
+    runProjEnv = runProjectEnvironment yxExe
 
+doLs :: FilePath -> Maybe String -> IO ()
+doLs dbFile possiblePattern = SQLite.withConnection dbFile $ \c -> do
+    let conn = DbConnection c
+    printProjects =<< case possiblePattern of
+        Nothing -> listProjects conn
+        Just pattern -> findProjects conn (modifyPattern pattern)
+
+modifyPattern :: IsString s => String -> s
+modifyPattern pat
+  | '*' `elem` pat = fromString pat
+  | otherwise      = fromString $ "*" <> pat <> "*"
+
+printProjects :: [Project] -> IO ()
+printProjects = mapM_ printProject
+  where
     printProject Project{..} = Text.putStrLn $ _name <> ": " <> _path
-    printProjects = mapM_ printProject
 
-runProjectEnvironment :: Project -> Maybe EnvironmentName -> IO ()
-runProjectEnvironment project@Project{..} possiblyEnvName = do
-    projectCfg <- initializeProject root
+runProjectEnvironment :: FilePath -> Maybe EnvironmentName -> Project -> IO ()
+runProjectEnvironment yxExe possiblyEnvName project@Project{..} = do
+    projectCfg <- initializeProject yxExe root
     (projEnvName, _projEnv) <- getProjEnv projectCfg
     setCurrentDirectory root
     env <- modifyEnvVariables project projEnvName <*> getEnvironment
@@ -180,8 +189,8 @@ runProjectEnvironment project@Project{..} possiblyEnvName = do
         lookupWhenProvided n =
             (n, ) <$> ProjectConfig.getEnvironment cfg (fromString n)
 
-newProeject :: DbConnection -> FilePath -> IO Project
-newProeject conn relativeDir = do
+newProject :: DbConnection -> FilePath -> IO Project
+newProject conn relativeDir = do
     -- Function canonicalizePath preserves trailing path separator.
     dir <- dropTrailingPathSeparator <$> canonicalizePath relativeDir
     let project = Project
