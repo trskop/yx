@@ -282,6 +282,13 @@ global:
         #pre-push:
         #pre-auto-gc:
 
+  shell:
+    bash:
+      # Bash-specific environment variables.
+      env:
+        HISTFILE: ${YX_PROJECT_ROOT}/.bash_history
+        HISTSIZE: -1
+
 # Environments for this project.
 environment:
   # Execution environment named "default". It is used when there is no
