@@ -107,6 +107,9 @@ projects. This will trigger YX project initialization.
 
 * Detect presence of right development tools, e.g. `cmake >=3.0.2`.
 
+* Command hooks. For "binaries" with `type: command` we can provide "pre" and
+  "post" hooks.
+
 
 Usage
 -----
@@ -240,8 +243,14 @@ environment:
       #    STACK_YAML: ${YX_PROJECT_ROOT}/stack-production.yaml
       #
       #build:
-      #  type: alias
+      #  type: command
       #  command: ${YX_ENVIRONMENT_DIR}/bin/stack build
+      #  pre-hook:
+      #    command: ${YX_PROJECT_ROOT}/dev-tools/pre-build-hook
+      #    env: {}
+      #  post-hook:
+      #    command: ${YX_PROJECT_ROOT}/dev-tools/post-build-hook
+      #    env: {}
       #
       #alex:
       #  type: symlink
