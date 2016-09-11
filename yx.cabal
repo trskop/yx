@@ -34,6 +34,7 @@ executable yx
     YX.Type.CommandType
     YX.Type.ConfigFile
     YX.Type.DbConnection
+    YX.Type.EnvVarTemplate
     YX.Type.RuntimeConfig
     YX.Type.Scm
     YX.Type.Shell
@@ -57,11 +58,13 @@ executable yx
     , filepath
     , freer
     , Glob
+    , mtl
     , optparse-applicative
     , overloaded-records
     , shake
     , split
     , sqlite-simple
+    , template
     , text
     , unix
     , unordered-containers

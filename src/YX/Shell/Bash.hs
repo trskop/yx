@@ -43,7 +43,8 @@ mkBashrc _ _ = Text.unlines
     , "PS1='\\u@\\h:\\w$(__yx_ps1_pretty)\\$ '"
     , ""
     , "if [[ -e \"${HOME}/.bash_yx\" ]]; then"
-    , "    echo \"Loading user defined *rc file: '${HOME}/.bash_yx'.\""
+    , "    printf '%s:\n  %s\n' \"Loading user defined *rc file\"\
+        \ \"${HOME}/.bash_yx\""
     , "    source \"${HOME}/.bash_yx\""
     , "fi"
     , ""

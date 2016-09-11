@@ -8,7 +8,7 @@ module YX.Initialize
 import Prelude (error)
 
 import Control.Applicative (Applicative, (*>), pure)
-import Control.Exception (Exception, throwIO)
+import Control.Exception (Exception, catch, throwIO)
 import Control.Monad ((>>=), foldM, unless, when)
 import Control.Monad.IO.Class (liftIO)
 import Data.Bool (Bool(False, True), (||), not, otherwise)
@@ -131,7 +131,7 @@ doYxStuff cfgRef yxExe root defaultYxConfig possibleYxConfig = shake opts $ do
     getProjectCfg' <- Shake.newCache $ \(yxConfigChanged, cacheFile) -> liftIO
         $ let memo r = r <$ atomicWriteIORef cfgRef (Just r)
               getMemo = readIORef cfgRef
-          in
+        in
             -- When configuration file has been changed then the cache must be
             -- invalidated. To avoid reading cache file (efficiently stored
             -- version of parsed configuration file) multiple times, we memoize
@@ -140,10 +140,18 @@ doYxStuff cfgRef yxExe root defaultYxConfig possibleYxConfig = shake opts $ do
                 then parseAndCacheYxConfig yxConfig cacheFile >>= memo
                 else getMemo >>= \case
                     Just r -> pure r
-                    Nothing -> readCachedYxConfig cacheFile
+                    Nothing ->
                         -- We don't need to memoize cache file reads, because,
                         -- it is done for us by Shake. See 'Shake.newCache' for
                         -- more details.
+                        readCachedYxConfig cacheFile
+                            `catch` \(CacheDecodingException _ _) ->
+                                -- This should happen only when cache file uses
+                                -- old data format and we need to reparse
+                                -- project config. As a result it may force
+                                -- some additional rules to be executed, but
+                                -- the result should always be consistent.
+                                parseAndCacheYxConfig yxConfig cacheFile
 
     let compileProjectCfg = getProjectCfg' . (True, )
         getProjectCfg = getProjectCfg' . (False, )
@@ -162,6 +170,7 @@ doYxStuff cfgRef yxExe root defaultYxConfig possibleYxConfig = shake opts $ do
             IO.putStrLn $ "Generating YX configuration file for this project: "
                 <> FilePath.makeRelative root out
             createProjectConfig root >>= Text.writeFile out
+            IO.putStrLn ""
 
     cfgCacheFile %> \out -> do
         -- We expect yxConfig to be already present. See "yx-initialization" rule
@@ -177,6 +186,7 @@ doYxStuff cfgRef yxExe root defaultYxConfig possibleYxConfig = shake opts $ do
         cfg <- getProjectCfg cfgCacheFile
         printGeneratingBashrc out
         compileBashrc cfg (FilePath.makeRelative yxEnvStuff out) out
+        liftIO $ IO.putStrLn ""
 
     yxShellStuff root "*" Bash </> "completion" %> \out -> do
         printGeneratingBashrc out
@@ -269,7 +279,7 @@ doYxStuff cfgRef yxExe root defaultYxConfig possibleYxConfig = shake opts $ do
         envName' = fromString envName
 
     printGeneratingBashrc out = liftIO . IO.putStrLn
-        $ "Generating Bash *rc script: " <> FilePath.makeRelative root out
+        $ "Generating Bash *rc script:\n  " <> FilePath.makeRelative root out
 
 createExecutableLink :: FilePath -> FilePath -> FilePath -> Shake.Action ()
 createExecutableLink root src dst = liftIO $ do
@@ -283,8 +293,8 @@ createExecutableLink root src dst = liftIO $ do
     dstExists <- doesFileExist dst
     when dstExists $ removeFile dst
 
-    IO.putStrLn $ "Creating symbolic link: " <> src <> " --> "
-        <> FilePath.makeRelative root dst
+    IO.putStrLn $ "Creating symbolic link:\n  " <> src <> " --> "
+        <> FilePath.makeRelative root dst <> "\n"
     Posix.createSymbolicLink src dst
 
 compileBashrc :: ProjectConfig -> FilePath -> FilePath -> Shake.Action ()
@@ -363,6 +373,20 @@ createProjectConfig root = do
         , "# Build tool used by the project."
         , "# Currently only 'Cabal' and 'Stack' are recognized automatically."
         , field' "build-tool" $ BuildTool.toText <$> buildTool
+        , ""
+        , "# Settings in global section are always applied, regardless of\
+            \ environment is"
+        , "# used."
+        , "global:"
+        , "  env:"
+        , "    # User can override these variables in \"${HOME}/.bash_yx\",\
+            \ that is usually"
+        , "    # necessary on systems with different installation paths for\
+            \ these tools."
+        , "    #YX_STACK_EXE: /usr/bin/stack"
+        , "    #YX_GIT_EXE: /usr/bin/git"
+        , ""
+        , "  bin:"
         , ""
         , "# Environments for this project."
         , "environment:"

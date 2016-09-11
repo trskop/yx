@@ -32,7 +32,6 @@ import Data.Maybe (Maybe(Just, Nothing))
 import Data.Monoid ((<>))
 import Data.Tuple (uncurry)
 import GHC.Generics (Generic)
-import Text.Read (Read)
 import Text.Show (Show)
 import System.IO (FilePath, IO)
 
@@ -53,6 +52,7 @@ import qualified Data.Yaml as Yaml (ParseException, decodeFileEither)
 
 import YX.Type.BuildTool (SomeBuildTool)
 import YX.Type.CommandType (CommandType(Command))
+import YX.Type.EnvVarTemplate (EnvVarTemplate)
 import YX.Type.Scm (SomeScm)
 
 
@@ -71,7 +71,7 @@ data Executable = Executable
     --, _preHook :: Text
     --, _postHook :: Text
     }
-  deriving (Eq, Generic, Read, Show)
+  deriving (Eq, Generic, Show)
 
 instance FromJSON Executable where
     parseJSON = Aeson.withObject "Executable" $ \o -> join $ mk
@@ -100,15 +100,15 @@ instance ToJSON Executable where
 type EnvironmentName = Text
 
 data Environment = Environment
-    { _env :: HashMap EnvironmentName Text
+    { _env :: [(EnvironmentName, Maybe EnvVarTemplate)]
     , _bin :: HashMap ExecutableName Executable
     , _isDefault :: Bool
     }
-  deriving (Eq, Generic, Read, Show)
+  deriving (Eq, Generic, Show)
 
 instance FromJSON Environment where
     parseJSON = Aeson.withObject "Environment" $ \o -> Environment
-        <$> o .:? "env" .!= HashMap.empty
+        <$> o .:? "env" .!= []
         <*> o .:? "bin" .!= HashMap.empty
         <*> o .:? "is-default" .!= False
 
@@ -125,12 +125,12 @@ instance ToJSON Environment where
 
 data ProjectConfig = ProjectConfig
     { _scm :: SomeScm
-    , _buildTool :: SomeBuildTool
+    , _buildTool :: SomeBuildTool   -- TODO: consider multiple build tools.
     , _environments :: HashMap Text Environment
     -- TODO:
     --, _global :: GlobalEnvironment
     }
-  deriving (Eq, Generic, Read, Show)
+  deriving (Eq, Generic, Show)
 
 instance FromJSON ProjectConfig where
     parseJSON = Aeson.withObject "ProjectConfig" $ \o -> join $ mk

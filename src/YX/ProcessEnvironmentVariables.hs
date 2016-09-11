@@ -1,5 +1,6 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedLabels #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -8,24 +9,37 @@
 module YX.ProcessEnvironmentVariables
   where
 
+import Control.Applicative (pure)
 import Control.Arrow ((***))
+import Control.Monad ((>>=))
+import Data.Foldable (mapM_)
 import Data.Function (($), (.))
-import Data.Functor ((<$>), fmap)
+import Data.Functor ((<$), (<$>), fmap)
 import qualified Data.List as List (map)
-import Data.Maybe (Maybe(Just, Nothing), catMaybes)
+import Data.Maybe (Maybe(Just, Nothing), catMaybes, maybe)
 import Data.String (fromString)
+import Data.Tuple (uncurry)
 import Data.Version (Version, showVersion)
 import qualified System.Environment (getEnvironment)
 import System.IO (FilePath, IO)
 
+import Control.Monad.State (StateT, runStateT, gets, modify)
+import Control.Monad.Writer (Writer, runWriter, tell)
 import Data.HashMap.Strict (HashMap)
-import qualified Data.HashMap.Strict as HashMap (filterWithKey, fromList)
+import qualified Data.HashMap.Strict as HashMap
+    ( delete
+    , filterWithKey
+    , fromList
+    , insert
+    , lookup
+    )
 import Data.HashSet (HashSet)
 import qualified Data.HashSet as HashSet (fromList, member)
 import Data.OverloadedRecords ((:::), R, get)
 import Data.Text (Text)
 
 import YX.Type.ConfigFile (EnvironmentName, ProjectConfig)
+import YX.Type.EnvVarTemplate (EnvVarTemplate, renderA)
 
 
 type EnvVarName = Text
@@ -33,6 +47,7 @@ type EnvVarNames = HashSet EnvVarName
 type EnvVarValue = Text
 type EnvVar = (EnvVarName, EnvVarValue)
 type EnvVars = HashMap EnvVarName EnvVarValue
+type ModifyEnvVars = [(EnvVarName, Maybe EnvVarTemplate)]
 
 
 -- | Environment variables that are safe or somewhat necessary to be present in
@@ -192,3 +207,35 @@ sanitizeEnvironment allow =
 getEnvironment :: IO EnvVars
 getEnvironment = HashMap.fromList . List.map (fromString *** fromString)
     <$> System.Environment.getEnvironment
+
+-- | Apply modifications to the environment variables. This is done in order in
+-- which the modifications are ordered.
+--
+-- If value for an environment variable is not found during the evaluation,
+-- then @\"\"@ is used as its value. Such occurrences are reported in the
+-- result.
+modifyEnvironment
+    :: ModifyEnvVars
+    -- ^ List of environment modifications.
+    -> EnvVars
+    -- ^ Initial environment.
+    -> ([EnvVarName], EnvVars)
+    -- ^ First element is list of environment variables that weren't found
+    -- during the evaluation, and the second one is the modified environment.
+modifyEnvironment = ((go . runWriter) .) . runStateT . modifyEnvironment'
+  where
+    go (((), x), y) = (y, x)
+
+modifyEnvironment' :: ModifyEnvVars -> StateT EnvVars (Writer [EnvVarName]) ()
+modifyEnvironment' = mapM_ . uncurry $ \name -> \case
+    Nothing -> modify (HashMap.delete name)
+    Just tmpl ->
+        gets mkLookup >>= renderA tmpl >>= modify . HashMap.insert name
+  where
+    mkLookup
+        :: EnvVars
+        -> EnvVarName
+        -> StateT EnvVars (Writer [EnvVarName]) EnvVarValue
+    mkLookup env k = maybe ("" <$ tell [k]) pure $ k `HashMap.lookup` env
+        -- TODO: Maybe some kind of a builder could be used instead of
+        --       [EnvVarName], but this will do, for now.

@@ -228,6 +228,8 @@ scm: "Git"
 # Currently only 'Cabal' and 'Stack' are recognized automatically.
 build-tool: Stack
 
+# Settings in global section are always applied, regardless of environment is
+# used.
 global:
   env:
     # User can override these variables in "${HOME}/.bash_yx", that is usually
@@ -248,11 +250,11 @@ global:
 
   build-tool:
     stack:
-      version: >=1.1
+      version: ">=1.1"
 
   scm:
     git:
-      version: >=1.9
+      version: ">=1.9"
 
       config:
         #core.editor: vim
