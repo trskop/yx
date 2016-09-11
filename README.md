@@ -148,7 +148,7 @@ Notes on what things would be good to use:
 User Configuration and Data Files
 ---------------------------------
 
-**NOT YET IMPLEMENTED.**
+**NOT YET FULLY IMPLEMENTED.**
 
 ```
 ${HOME}/
@@ -162,24 +162,31 @@ ${HOME}/
 YX Project Artifacts
 --------------------
 
+**NOT YET FULLY IMPLEMENTED.**
+
 ```
 ${YX_PROJECT_ROOT}/
 |-- yx.yaml
 `-- .yx-stuff/
+     |-- global/
+     |   |-- bash/
+     |   |   `-- bashrc
+     |   |
+     |   `-- git/
+     |       `-- git.config
+     |
      |-- env/
      |   `-- ${YX_ENVIRONMENT}/
      |       |-- bash/
      |       |   |-- bashrc
      |       |   `-- completion
      |       |
-     |       `-- bin/
-     |           |-- yx --> ${YX_EXE}
-     |           |-- build --> ${YX_EXE}
-     |           |-- ghc --> ${YX_EXE}
-     |           |-- ghci --> ${YX_EXE}
-     |           |-- repl --> ${YX_EXE}
-     |           |-- run --> ${YX_EXE}
-     |           `-- stack --> ${YX_EXE}
+     |       |-- bin/
+     |       |   |-- yx --> ${YX_EXE}
+     |       |   `-- ...
+     |       |
+     |       `-- git/
+     |           `-- git.config
      |
      `-- cache/
          `-- config.bin
@@ -207,7 +214,7 @@ Script `"${YX_PROJECT_ROOT}/.yx-stuff/bash/bashrc"` does:
 YX Project Configuration File
 -----------------------------
 
-**NOT YET IMPLEMENTED.**
+**NOT YET FULLY IMPLEMENTED.**
 
 ```yaml
 # Source Code Management (SCM) tool used by the project.
